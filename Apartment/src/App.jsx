@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Spin, message
+  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Spin, message, List, Popover, Empty
 } from 'antd';
 import {
   DashboardOutlined,
@@ -10,18 +10,92 @@ import {
   ThunderboltOutlined,
   BellOutlined,
   SearchOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  CheckCircleOutlined,
+  ToolOutlined
 } from '@ant-design/icons';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, orderBy, limit, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import AdminDashboard from './components/page/AdminDashboard';
 import RoomList from './components/page/RoomList';
 import TenantPortal from './components/page/TenantPortal';
 import Login from './components/page/Login';
+import BillingList from './components/page/BillingList';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/th';
+
+dayjs.extend(relativeTime);
+dayjs.locale('th');
 
 const { Header, Content, Sider, Footer } = Layout;
 const { Title, Text } = Typography;
+
+const NotificationBell = () => {
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    // Listen to top 20 recent notifications
+    const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"), limit(20));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setNotifications(data);
+      setUnreadCount(data.filter(n => !n.read).length);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleMarkAsRead = async () => {
+    // Mark all visible as read
+    const unread = notifications.filter(n => !n.read);
+    unread.forEach(async (n) => {
+      await updateDoc(doc(db, "notifications", n.id), { read: true });
+    });
+  };
+
+  const content = (
+    <div className="w-[300px]">
+      <div className="flex justify-between items-center mb-2 px-1">
+        <Text strong>การแจ้งเตือน</Text>
+        <Button type="link" size="small" onClick={handleMarkAsRead} disabled={unreadCount === 0}>อ่านทั้งหมด</Button>
+      </div>
+      <div className="max-h-[300px] overflow-y-auto">
+        <List
+          dataSource={notifications}
+          renderItem={item => (
+            <List.Item className={`px-2 py-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-lg mb-1 ${!item.read ? 'bg-red-50/50' : ''}`}>
+              <List.Item.Meta
+                avatar={
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === 'payment' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
+                    {item.type === 'payment' ? <CheckCircleOutlined /> : <ToolOutlined />}
+                  </div>
+                }
+                title={<Text className="text-xs font-bold text-slate-700">{item.title}</Text>}
+                description={
+                  <div className="flex flex-col">
+                    <Text className="text-[10px] text-slate-500">{item.message}</Text>
+                    <Text className="text-[9px] text-slate-300 mt-1">{dayjs(item.createdAt?.toDate()).fromNow()}</Text>
+                  </div>
+                }
+              />
+            </List.Item>
+          )}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="ไม่มีการแจ้งเตือน" /> }}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <Popover content={content} trigger="click" placement="bottomRight" arrow={false} overlayInnerStyle={{ padding: '12px', borderRadius: '16px' }}>
+      <Badge count={unreadCount} overflowCount={99} color="#ef4444">
+        <Button shape="circle" type="text" icon={<BellOutlined className={`text-lg transition-colors ${unreadCount > 0 ? 'text-slate-600 animate-pulse-slow' : 'text-slate-400'}`} />} />
+      </Badge>
+    </Popover>
+  );
+};
 
 // --- Layout หลักของแอป ---
 const App = () => {
@@ -32,12 +106,17 @@ const App = () => {
   const [menu, setMenu] = useState('dashboard');
 
   useEffect(() => {
+    let unsubDoc; // Variable to hold the snapshot unsubscribe function
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         // --- User is Signed In ---
-        // Listen to Firestore changes (Real-time) to handle race condition on Registration
         const userRef = doc(db, "users", user.uid);
-        const unsubDoc = onSnapshot(userRef, (docSnap) => {
+
+        // Unsubscribe previous listener if exists
+        if (unsubDoc) unsubDoc();
+
+        unsubDoc = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const userData = docSnap.data();
             const userRole = userData.role || 'admin';
@@ -46,25 +125,25 @@ const App = () => {
             setIsLoggedIn(true);
           } else {
             console.log("Waiting for user profile creation...");
-            // Don't set isLoggedIn=true yet if it's registration flow? 
-            // Or set it but default to loading/admin?
-            // Better to just wait. But if it's a legacy user with no doc?
-            // For safety, if after 2 seconds no doc, default to admin?
-            // For simplicity: Let's wait. But to invalid blocking, we can set default.
-            // Actually, if we just wait, the spinner continues? 
-            // No, we need to stop spinner.
           }
+          // Stop loading once we have the user data (or lack thereof)
+          setIsAuthChecking(false);
         });
 
-        return () => unsubDoc();
       } else {
+        // --- User is Signed Out ---
+        if (unsubDoc) unsubDoc();
         setIsLoggedIn(false);
         setRole('admin');
+        setIsAuthChecking(false);
       }
-      setIsAuthChecking(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      // Cleanup
+      if (unsubDoc) unsubDoc();
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => { setMenu(role === 'admin' ? 'dashboard' : 'tenant_home'); }, [role]);
@@ -88,7 +167,7 @@ const App = () => {
   if (isAuthChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Spin size="large" tip="กำลังโหลด..." />
+        <Spin size="large" fullscreen tip="กำลังโหลด..." />
       </div>
     );
   }
@@ -149,7 +228,7 @@ const App = () => {
               <input type="text" placeholder="ค้นหาห้อง หรือ บิล..." className="bg-transparent border-none outline-none text-xs w-full font-medium" />
             </div>
             <Space size="large">
-              <Badge count={2} dot color="red"><Button shape="circle" type="text" icon={<BellOutlined className="text-lg text-slate-400" />} /></Badge>
+              <NotificationBell />
               <Space className="cursor-pointer hover:bg-slate-50 p-2 rounded-full transition-all pr-4 pl-1" onClick={handleLogout}>
                 <Avatar size={40} className="border-2 border-white shadow-md bg-slate-200" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`} />
                 <div className="flex flex-col text-right hidden lg:flex">
@@ -165,12 +244,13 @@ const App = () => {
               <div className="flex justify-between items-end">
                 <div className="space-y-1">
                   <Text className="text-red-600 font-black tracking-widest text-[10px] uppercase">ศูนย์ควบคุม</Text>
-                  <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : 'หน้าหลักผู้เช่า'}</Title>
+                  <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : menu === 'billing' ? 'การจัดการบิล' : 'หน้าหลักผู้เช่า'}</Title>
                 </div>
               </div>
 
               {menu === 'dashboard' && <AdminDashboard />}
               {menu === 'rooms' && <RoomList />}
+              {menu === 'billing' && <BillingList />}
               {role === 'tenant' && menu === 'tenant_home' && <TenantPortal />}
             </div>
           </Content>
