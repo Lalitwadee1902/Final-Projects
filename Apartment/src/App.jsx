@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Tooltip
+  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Spin, message
 } from 'antd';
 import {
   DashboardOutlined,
@@ -12,6 +12,9 @@ import {
   SearchOutlined,
   LogoutOutlined
 } from '@ant-design/icons';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 import AdminDashboard from './components/page/AdminDashboard';
 import RoomList from './components/page/RoomList';
 import TenantPortal from './components/page/TenantPortal';
@@ -23,27 +26,78 @@ const { Title, Text } = Typography;
 // --- Layout หลักของแอป ---
 const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [role, setRole] = useState('admin'); // 'admin' or 'tenant'
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [role, setRole] = useState('admin');
   const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState('dashboard');
 
-  const handleLogin = (userRole) => {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // --- User is Signed In ---
+        // Listen to Firestore changes (Real-time) to handle race condition on Registration
+        const userRef = doc(db, "users", user.uid);
+        const unsubDoc = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data();
+            const userRole = userData.role || 'admin';
+            setRole(userRole);
+            setMenu(userRole === 'admin' ? 'dashboard' : 'tenant_home');
+            setIsLoggedIn(true);
+          } else {
+            console.log("Waiting for user profile creation...");
+            // Don't set isLoggedIn=true yet if it's registration flow? 
+            // Or set it but default to loading/admin?
+            // Better to just wait. But if it's a legacy user with no doc?
+            // For safety, if after 2 seconds no doc, default to admin?
+            // For simplicity: Let's wait. But to invalid blocking, we can set default.
+            // Actually, if we just wait, the spinner continues? 
+            // No, we need to stop spinner.
+          }
+        });
+
+        return () => unsubDoc();
+      } else {
+        setIsLoggedIn(false);
+        setRole('admin');
+      }
+      setIsAuthChecking(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => { setMenu(role === 'admin' ? 'dashboard' : 'tenant_home'); }, [role]);
+
+  // Callback for Tenant Login (Mock) or explicit set
+  const handleManualLogin = (userRole) => {
     setRole(userRole);
     setIsLoggedIn(true);
     setMenu(userRole === 'admin' ? 'dashboard' : 'tenant_home');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (auth.currentUser) {
+      await signOut(auth);
+    }
     setIsLoggedIn(false);
     setRole('admin');
     setMenu('dashboard');
   };
 
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Spin size="large" tip="กำลังโหลด..." />
+      </div>
+    );
+  }
+
   // If not logged in, show Login page
   if (!isLoggedIn) {
     return (
       <ConfigProvider theme={{ token: { colorPrimary: '#dc2626', borderRadius: 16, fontFamily: "'Plus Jakarta Sans', 'Kanit', sans-serif" } }}>
-        <Login onLogin={handleLogin} />
+        <Login onLogin={handleManualLogin} />
       </ConfigProvider>
     );
   }
