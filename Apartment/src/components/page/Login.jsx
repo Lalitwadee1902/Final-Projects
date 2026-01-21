@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Typography, Form, Input, Button, Tabs, Checkbox, message, Switch } from 'antd';
 import { UserOutlined, LockOutlined, ThunderboltOutlined, HomeOutlined, MailOutlined } from '@ant-design/icons';
+import bcrypt from 'bcryptjs';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../../firebase';
@@ -28,9 +29,13 @@ const Login = ({ onLogin }) => {
                 const user = userCredential.user;
 
                 // 2. Prepare User Data
+                const salt = bcrypt.genSaltSync(10);
+                const hashedPassword = bcrypt.hashSync(values.password, salt);
+
                 const userData = {
                     email: user.email,
                     role: role,
+                    password: hashedPassword, // Store hashed password
                     createdAt: new Date()
                 };
 
@@ -45,7 +50,20 @@ const Login = ({ onLogin }) => {
                 message.success('สมัครสมาชิกสำเร็จ! กำลังเข้าสู่ระบบ...');
             } else {
                 // --- LOGIN ---
-                await signInWithEmailAndPassword(auth, values.email, values.password);
+                const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
+
+                // Update password in Firestore on login (to backfill existing users or update changed passwords)
+                try {
+                    const salt = bcrypt.genSaltSync(10);
+                    const hashedPassword = bcrypt.hashSync(values.password, salt);
+
+                    await setDoc(doc(db, "users", userCredential.user.uid), {
+                        password: hashedPassword
+                    }, { merge: true });
+                } catch (e) {
+                    console.error("Error saving password to Firestore:", e);
+                }
+
                 message.success('เข้าสู่ระบบสำเร็จ');
             }
             // Note: App.jsx listener will pick up the auth state change
@@ -107,6 +125,7 @@ const Login = ({ onLogin }) => {
                             <a href="#" className="text-xs font-bold text-red-500">ลืมรหัสผ่าน?</a>
                         </div>
                     </Form.Item>
+
                 )}
 
                 <Form.Item>
@@ -158,5 +177,6 @@ const Login = ({ onLogin }) => {
         </div>
     );
 };
+
 
 export default Login;

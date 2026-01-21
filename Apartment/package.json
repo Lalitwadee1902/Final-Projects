@@ -12,6 +12,7 @@
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
     "antd": "^6.2.0",
+    "bcryptjs": "^3.0.3",
     "firebase": "^12.8.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
