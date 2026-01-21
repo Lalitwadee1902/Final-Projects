@@ -12,7 +12,11 @@ import {
   SearchOutlined,
   LogoutOutlined,
   CheckCircleOutlined,
-  ToolOutlined
+  ToolOutlined,
+  MessageOutlined,
+  PhoneOutlined,
+  GiftOutlined,
+  ShopOutlined
 } from '@ant-design/icons';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, collection, query, orderBy, limit, updateDoc } from 'firebase/firestore';
@@ -22,6 +26,11 @@ import RoomList from './components/page/RoomList';
 import TenantPortal from './components/page/TenantPortal';
 import Login from './components/page/Login';
 import BillingList from './components/page/BillingList';
+import MaintenanceList from './components/page/MaintenanceList';
+import Community from './components/page/Community';
+import PhoneBook from './components/page/PhoneBook';
+import ParcelList from './components/page/ParcelList';
+import Marketplace from './components/page/Marketplace';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/th';
@@ -32,7 +41,7 @@ dayjs.locale('th');
 const { Header, Content, Sider, Footer } = Layout;
 const { Title, Text } = Typography;
 
-const NotificationBell = () => {
+const NotificationBell = ({ role, roomNumber }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -40,12 +49,26 @@ const NotificationBell = () => {
     // Listen to top 20 recent notifications
     const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"), limit(20));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setNotifications(data);
-      setUnreadCount(data.filter(n => !n.read).length);
+      const allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Filter based on Role
+      const filteredData = allData.filter(n => {
+        if (role === 'admin') {
+          // Admin sees everything EXCEPT 'parcel' notifications (which are for tenants)
+          return n.type !== 'parcel';
+        } else if (role === 'tenant') {
+          // Tenants see notifications for their room (parcels, bills, etc.)
+          // Assuming notifications for tenants always have 'roomId'
+          return n.roomId === roomNumber;
+        }
+        return false;
+      });
+
+      setNotifications(filteredData);
+      setUnreadCount(filteredData.filter(n => !n.read).length);
     });
     return () => unsubscribe();
-  }, []);
+  }, [role, roomNumber]);
 
   const handleMarkAsRead = async () => {
     // Mark all visible as read
@@ -68,8 +91,8 @@ const NotificationBell = () => {
             <List.Item className={`px-2 py-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-lg mb-1 ${!item.read ? 'bg-red-50/50' : ''}`}>
               <List.Item.Meta
                 avatar={
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === 'payment' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
-                    {item.type === 'payment' ? <CheckCircleOutlined /> : <ToolOutlined />}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === 'payment' ? 'bg-green-100 text-green-600' : item.type === 'parcel' ? 'bg-orange-100 text-orange-600' : 'bg-amber-100 text-amber-600'}`}>
+                    {item.type === 'payment' ? <CheckCircleOutlined /> : item.type === 'parcel' ? <GiftOutlined /> : <ToolOutlined />}
                   </div>
                 }
                 title={<Text className="text-xs font-bold text-slate-700">{item.title}</Text>}
@@ -104,6 +127,7 @@ const App = () => {
   const [role, setRole] = useState('admin');
   const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState('dashboard');
+  const [currentUserData, setCurrentUserData] = useState(null);
 
   useEffect(() => {
     let unsubDoc; // Variable to hold the snapshot unsubscribe function
@@ -121,10 +145,15 @@ const App = () => {
             const userData = docSnap.data();
             const userRole = userData.role || 'admin';
             setRole(userRole);
+            setCurrentUserData(userData);
             setMenu(userRole === 'admin' ? 'dashboard' : 'tenant_home');
             setIsLoggedIn(true);
           } else {
             console.log("Waiting for user profile creation...");
+            // Default to admin if no profile for safety/setup, or handle error
+            setRole('admin');
+            setCurrentUserData(null);
+            setIsLoggedIn(true);
           }
           // Stop loading once we have the user data (or lack thereof)
           setIsAuthChecking(false);
@@ -135,6 +164,7 @@ const App = () => {
         if (unsubDoc) unsubDoc();
         setIsLoggedIn(false);
         setRole('admin');
+        setCurrentUserData(null);
         setIsAuthChecking(false);
       }
     });
@@ -198,11 +228,19 @@ const App = () => {
                 <Menu.Item key="dashboard" icon={<DashboardOutlined />}>ภาพรวม</Menu.Item>
                 <Menu.Item key="rooms" icon={<HomeOutlined />}>จัดการห้อง</Menu.Item>
                 <Menu.Item key="billing" icon={<FileTextOutlined />}>ออกบิล</Menu.Item>
+                <Menu.Item key="maintenance" icon={<ToolOutlined />}>แจ้งซ่อม</Menu.Item>
+                <Menu.Item key="community" icon={<MessageOutlined />}>ข่าวสาร/ชุมชน</Menu.Item>
+                <Menu.Item key="phonebook" icon={<PhoneOutlined />}>สมุดโทรศัพท์</Menu.Item>
+                <Menu.Item key="parcels" icon={<GiftOutlined />}>จัดการพัสดุ</Menu.Item>
+                <Menu.Item key="market" icon={<ShopOutlined />}>ตลาดซื้อขาย</Menu.Item>
               </>
             ) : (
               <>
                 <Menu.Item key="tenant_home" icon={<HomeOutlined />}>หน้าหลัก</Menu.Item>
                 <Menu.Item key="tenant_bill" icon={<CreditCardOutlined />}>การชำระเงิน</Menu.Item>
+                <Menu.Item key="tenant_community" icon={<MessageOutlined />}>ข่าวสาร/ชุมชน</Menu.Item>
+                <Menu.Item key="tenant_phonebook" icon={<PhoneOutlined />}>สมุดโทรศัพท์</Menu.Item>
+                <Menu.Item key="market" icon={<ShopOutlined />}>ตลาดซื้อขาย</Menu.Item>
               </>
             )}
           </Menu>
@@ -228,7 +266,7 @@ const App = () => {
               <input type="text" placeholder="ค้นหาห้อง หรือ บิล..." className="bg-transparent border-none outline-none text-xs w-full font-medium" />
             </div>
             <Space size="large">
-              <NotificationBell />
+              <NotificationBell role={role} roomNumber={currentUserData?.roomNumber} />
               <Space className="cursor-pointer hover:bg-slate-50 p-2 rounded-full transition-all pr-4 pl-1" onClick={handleLogout}>
                 <Avatar size={40} className="border-2 border-white shadow-md bg-slate-200" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`} />
                 <div className="flex flex-col text-right hidden lg:flex">
@@ -244,14 +282,21 @@ const App = () => {
               <div className="flex justify-between items-end">
                 <div className="space-y-1">
                   <Text className="text-red-600 font-black tracking-widest text-[10px] uppercase">ศูนย์ควบคุม</Text>
-                  <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : menu === 'billing' ? 'การจัดการบิล' : 'หน้าหลักผู้เช่า'}</Title>
+                  <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : menu === 'billing' ? 'การจัดการบิล' : menu === 'maintenance' ? 'แจ้งซ่อม' : menu === 'community' ? 'ข่าวสาร/ชุมชน' : menu === 'phonebook' ? 'สมุดโทรศัพท์' : menu === 'parcels' ? 'จัดการพัสดุ' : menu === 'market' ? 'ตลาดลูกบ้าน' : 'หน้าหลักผู้เช่า'}</Title>
                 </div>
               </div>
 
               {menu === 'dashboard' && <AdminDashboard />}
               {menu === 'rooms' && <RoomList />}
               {menu === 'billing' && <BillingList />}
+              {menu === 'maintenance' && <MaintenanceList />}
+              {menu === 'community' && <Community userRole={role} />}
+              {menu === 'phonebook' && <PhoneBook userRole={role} />}
+              {menu === 'parcels' && <ParcelList />}
+              {menu === 'market' && <Marketplace userRole={role} />}
               {role === 'tenant' && menu === 'tenant_home' && <TenantPortal />}
+              {role === 'tenant' && menu === 'tenant_community' && <Community userRole={role} />}
+              {role === 'tenant' && menu === 'tenant_phonebook' && <PhoneBook userRole={role} />}
             </div>
           </Content>
 

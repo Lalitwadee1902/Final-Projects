@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm } from 'antd';
-import { PlusOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, CheckSquareOutlined, CloseOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import dayjs from 'dayjs';
@@ -22,6 +22,7 @@ const BillingList = () => {
 
     // Selection
     const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
 
     // Fetch Bills Real-time
     useEffect(() => {
@@ -147,6 +148,13 @@ const BillingList = () => {
         setSelectedRowKeys(newSelectedRowKeys);
     };
 
+    const toggleSelectionMode = () => {
+        setIsSelectionMode(!isSelectionMode);
+        if (isSelectionMode) {
+            setSelectedRowKeys([]);
+        }
+    };
+
     const rowSelection = {
         selectedRowKeys,
         onChange: onSelectChange,
@@ -226,6 +234,13 @@ const BillingList = () => {
                 }
                 extra={
                     <Space>
+                        <Button
+                            onClick={toggleSelectionMode}
+                            icon={isSelectionMode ? <CloseOutlined /> : <CheckSquareOutlined />}
+                            className={isSelectionMode ? "text-slate-500" : "text-blue-600 bg-blue-50 border-blue-200"}
+                        >
+                            {isSelectionMode ? 'ยกเลิก' : 'เลือก'}
+                        </Button>
                         {selectedRowKeys.length > 0 && (
                             <Popconfirm title={`ลบ ${selectedRowKeys.length} รายการ?`} onConfirm={handleBulkDelete} okText="ลบเลย" cancelText="ไม่">
                                 <Button danger type="dashed" icon={<DeleteOutlined />}>ลบ ({selectedRowKeys.length})</Button>
@@ -275,7 +290,7 @@ const BillingList = () => {
                     </div>
                 </div>
                 <Table
-                    rowSelection={rowSelection}
+                    rowSelection={isSelectionMode ? rowSelection : null}
                     columns={columns}
                     dataSource={filteredBills}
                     pagination={{ pageSize: 10 }}
