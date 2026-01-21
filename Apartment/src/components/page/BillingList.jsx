@@ -1,0 +1,324 @@
+import React, { useState, useEffect } from 'react';
+import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm } from 'antd';
+import { PlusOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined } from '@ant-design/icons';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { db } from '../../../firebase';
+import dayjs from 'dayjs';
+
+const { Text } = Typography;
+const { Option } = Select;
+
+const BillingList = () => {
+    const [bills, setBills] = useState([]);
+    const [rooms, setRooms] = useState([]);
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [form] = Form.useForm();
+
+    // Filters
+    const [searchText, setSearchText] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All');
+    const [monthFilter, setMonthFilter] = useState(null);
+
+    // Selection
+    const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+
+    // Fetch Bills Real-time
+    useEffect(() => {
+        // Query bills ordered by createdAt desc if possible, or just default
+        const q = query(collection(db, "bills"), orderBy("createdAt", "desc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const billData = snapshot.docs.map(doc => ({
+                key: doc.id,
+                ...doc.data()
+            }));
+            setBills(billData);
+        }, (error) => {
+            // Fallback if index is missing
+            console.log("Index might be missing, trying without order", error);
+            const unsubscribeNoOrder = onSnapshot(collection(db, "bills"), (snapshot) => {
+                const billData = snapshot.docs.map(doc => ({
+                    key: doc.id,
+                    ...doc.data()
+                }));
+                // Sort client side
+                billData.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+                setBills(billData);
+            });
+            return () => unsubscribeNoOrder();
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Fetch Rooms for Dropdown
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, "rooms"), (snapshot) => {
+            const roomData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            roomData.sort((a, b) => a.id.localeCompare(b.id));
+            setRooms(roomData);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Filter Logic
+    const filteredBills = bills.filter(bill => {
+        const matchesSearch = bill.room.toString().toLowerCase().includes(searchText.toLowerCase());
+        const matchesStatus = statusFilter === 'All' || bill.status === statusFilter;
+
+        let matchesMonth = true;
+        if (monthFilter) {
+            const billDate = dayjs(bill.dueDate);
+            matchesMonth = billDate.format('YYYY-MM') === monthFilter.format('YYYY-MM');
+        }
+
+        return matchesSearch && matchesStatus && matchesMonth;
+    });
+
+    const handleCreateBill = async (values) => {
+        setLoading(true);
+        try {
+            await addDoc(collection(db, "bills"), {
+                room: values.room,
+                amount: values.amount,
+                dueDate: values.dueDate.format('YYYY-MM-DD'),
+                status: 'Pending',
+                type: values.type || 'Rent',
+                createdAt: new Date()
+            });
+            message.success('สร้างบิลสำเร็จ');
+            setIsModalVisible(false);
+            form.resetFields();
+        } catch (error) {
+            console.error(error);
+            message.error('สร้างบิลไม่สำเร็จ');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleMarkAsPaid = async (id) => {
+        try {
+            await updateDoc(doc(db, "bills", id), {
+                status: 'Paid',
+                paidAt: new Date()
+            });
+
+            // Find bill details for notification (Simplified, typically we'd fetch or pass obj)
+            const bill = bills.find(b => b.key === id);
+            if (bill) {
+                await addDoc(collection(db, "notifications"), {
+                    type: 'payment',
+                    title: `ชำระเงินแล้ว ห้อง ${bill.room}`,
+                    message: `บิลยอด ฿${bill.amount.toLocaleString()} ได้รับการยืนยันการชำระ`,
+                    read: false,
+                    createdAt: new Date()
+                });
+            }
+
+            message.success('อัปเดตสถานะเรียบร้อย');
+        } catch (error) {
+            message.error('เกิดข้อผิดพลาด');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        try {
+            await deleteDoc(doc(db, "bills", id));
+            message.success('ลบบิลสำเร็จ');
+        } catch (error) {
+            message.error('ลบไม่สำเร็จ');
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        try {
+            await Promise.all(selectedRowKeys.map(key => deleteDoc(doc(db, "bills", key))));
+            message.success(`ลบ ${selectedRowKeys.length} รายการสำเร็จ`);
+            setSelectedRowKeys([]);
+        } catch (error) {
+            message.error('ลบไม่สำเร็จ');
+        }
+    };
+
+    const onSelectChange = (newSelectedRowKeys) => {
+        setSelectedRowKeys(newSelectedRowKeys);
+    };
+
+    const rowSelection = {
+        selectedRowKeys,
+        onChange: onSelectChange,
+    };
+
+    const columns = [
+        {
+            title: 'ห้อง',
+            dataIndex: 'room',
+            key: 'room',
+            render: (t) => <Text className="font-black text-slate-800">{t}</Text>
+        },
+        {
+            title: 'รายการ',
+            dataIndex: 'type',
+            key: 'type',
+            render: (t) => <Text className="text-slate-500">{t || 'Rent'}</Text>
+        },
+        {
+            title: 'ยอดชำระ',
+            dataIndex: 'amount',
+            key: 'amount',
+            render: (v) => <Text className="font-bold text-slate-900">฿{v.toLocaleString()}</Text>
+        },
+        {
+            title: 'กำหนดชำระ',
+            dataIndex: 'dueDate',
+            key: 'dueDate',
+            render: (t) => <Text className="text-slate-500 text-xs">{t}</Text>
+        },
+        {
+            title: 'สถานะ',
+            dataIndex: 'status',
+            key: 'status',
+            render: (s) => (
+                <Tag className="rounded-full border-none px-3 text-[10px] font-black"
+                    color={s === 'Paid' ? '#f0fdf4' : s === 'Pending' ? '#fefce8' : '#fee2e2'}
+                >
+                    <span style={{ color: s === 'Paid' ? '#16a34a' : s === 'Pending' ? '#ca8a04' : '#dc2626' }}>
+                        {s.toUpperCase()}
+                    </span>
+                </Tag>
+            )
+        },
+        {
+            title: '',
+            key: 'action',
+            render: (_, record) => (
+                <Space>
+                    {record.status !== 'Paid' && (
+                        <Button
+                            type="text"
+                            className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            icon={<CheckCircleOutlined />}
+                            onClick={() => handleMarkAsPaid(record.key)}
+                        >
+                            ยืนยันยอด
+                        </Button>
+                    )}
+                    <Popconfirm title="ลบบิลนี้?" onConfirm={() => handleDelete(record.key)}>
+                        <Button type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                </Space>
+            )
+        }
+    ];
+
+    return (
+        <>
+            <Card
+                bordered={false}
+                title={
+                    <div className="flex flex-col">
+                        <Text className="font-black text-lg">รายการบิลเรียกเก็บ</Text>
+                        <Text className="text-xs text-slate-400 font-normal">จัดการบิลค่าเช่าและค่าน้ำค่าไฟ</Text>
+                    </div>
+                }
+                extra={
+                    <Space>
+                        {selectedRowKeys.length > 0 && (
+                            <Popconfirm title={`ลบ ${selectedRowKeys.length} รายการ?`} onConfirm={handleBulkDelete} okText="ลบเลย" cancelText="ไม่">
+                                <Button danger type="dashed" icon={<DeleteOutlined />}>ลบ ({selectedRowKeys.length})</Button>
+                            </Popconfirm>
+                        )}
+                        <Button
+                            type="primary"
+                            danger
+                            className="rounded-xl font-bold border-none shadow-md shadow-red-100 flex items-center"
+                            icon={<PlusOutlined />}
+                            onClick={() => setIsModalVisible(true)}
+                        >
+                            สร้างบิลใหม่
+                        </Button>
+                    </Space>
+                }
+                className="shadow-sm rounded-2xl"
+            >
+                <div className="mb-4 flex flex-wrap gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <Input
+                        placeholder="🔍 ค้นหาห้อง..."
+                        style={{ width: 150 }}
+                        value={searchText}
+                        onChange={e => setSearchText(e.target.value)}
+                        className="rounded-lg"
+                    />
+                    <Select
+                        defaultValue="All"
+                        style={{ width: 150 }}
+                        onChange={setStatusFilter}
+                        className="rounded-lg"
+                    >
+                        <Option value="All">ทุกสถานะ</Option>
+                        <Option value="Pending">รอชำระ (Pending)</Option>
+                        <Option value="Paid">ชำระแล้ว (Paid)</Option>
+                        <Option value="Overdue">เกินกำหนด (Overdue)</Option>
+                    </Select>
+                    <DatePicker
+                        picker="month"
+                        placeholder="เลือกเดือน"
+                        onChange={setMonthFilter}
+                        className="rounded-lg w-[150px]"
+                        format={'MMM YYYY'}
+                    />
+                    <div className="flex-1 text-right text-xs text-slate-400 self-center">
+                        เจอทั้งหมด {filteredBills.length} รายการ
+                    </div>
+                </div>
+                <Table
+                    rowSelection={rowSelection}
+                    columns={columns}
+                    dataSource={filteredBills}
+                    pagination={{ pageSize: 10 }}
+                />
+            </Card>
+
+            <Modal
+                title="สร้างบิลใหม่"
+                open={isModalVisible}
+                onCancel={() => setIsModalVisible(false)}
+                footer={null}
+                destroyOnClose
+            >
+                <Form layout="vertical" onFinish={handleCreateBill} form={form}>
+                    <Form.Item name="room" label="ห้อง" rules={[{ required: true, message: 'กรุณาเลือกห้อง' }]}>
+                        <Select placeholder="เลือกห้อง">
+                            {rooms.map(r => (
+                                <Option key={r.id} value={r.id}>{r.id} ({r.tenant})</Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+
+                    <Form.Item name="type" label="ประเภทยอด" initialValue="ค่าเช่า (Rent)">
+                        <Select>
+                            <Option value="ค่าเช่า (Rent)">ค่าเช่า (Rent)</Option>
+                            <Option value="ค่าน้ำ/ไฟ (Utilities)">ค่าน้ำ/ไฟ (Utilities)</Option>
+                            <Option value="ซ่อมบำรุง (Maintenance)">ซ่อมบำรุง (Maintenance)</Option>
+                        </Select>
+                    </Form.Item>
+
+                    <Form.Item name="amount" label="จำนวนเงิน (บาท)" rules={[{ required: true }]}>
+                        <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                    </Form.Item>
+
+                    <Form.Item name="dueDate" label="กำหนดชำระ" rules={[{ required: true }]}>
+                        <DatePicker style={{ width: '100%' }} />
+                    </Form.Item>
+
+                    <Button type="primary" htmlType="submit" loading={loading} block danger className="h-10 font-bold">สร้างบิล</Button>
+                </Form>
+            </Modal>
+        </>
+    );
+};
+
+export default BillingList;
