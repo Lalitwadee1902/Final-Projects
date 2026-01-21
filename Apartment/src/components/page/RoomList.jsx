@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Tag, Button, Typography, Modal, Form, Input, Select, InputNumber, message, Popconfirm, Space } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, CheckSquareOutlined, CloseOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, doc, deleteDoc, setDoc, updateDoc, addDoc } from 'firebase/firestore';
 import { db } from '../../../firebase';
 
@@ -21,6 +21,7 @@ const RoomList = () => {
 
     // Selection
     const [selectedRowKeys, setSelectedRowKeys] = useState([]);
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
 
     // Real-time Fetch
     useEffect(() => {
@@ -126,6 +127,13 @@ const RoomList = () => {
         setSelectedRowKeys(newSelectedRowKeys);
     };
 
+    const toggleSelectionMode = () => {
+        setIsSelectionMode(!isSelectionMode);
+        if (isSelectionMode) {
+            setSelectedRowKeys([]);
+        }
+    };
+
     const rowSelection = {
         selectedRowKeys,
         onChange: onSelectChange,
@@ -164,6 +172,13 @@ const RoomList = () => {
         <>
             <Card bordered={false} title={<Text className="font-black text-lg">การจัดการห้องพัก</Text>} extra={
                 <Space>
+                    <Button
+                        onClick={toggleSelectionMode}
+                        icon={isSelectionMode ? <CloseOutlined /> : <CheckSquareOutlined />}
+                        className={isSelectionMode ? "text-slate-500" : "text-blue-600 bg-blue-50 border-blue-200"}
+                    >
+                        {isSelectionMode ? 'ยกเลิก' : 'เลือก'}
+                    </Button>
                     {selectedRowKeys.length > 0 && (
                         <Popconfirm title={`ลบ ${selectedRowKeys.length} รายการ?`} onConfirm={handleBulkDelete} okText="ลบเลย" cancelText="ไม่">
                             <Button danger type="dashed" icon={<DeleteOutlined />}>ลบ ({selectedRowKeys.length})</Button>
@@ -215,7 +230,7 @@ const RoomList = () => {
                     </div>
                 </div>
                 <Table
-                    rowSelection={rowSelection}
+                    rowSelection={isSelectionMode ? rowSelection : null}
                     columns={columns}
                     dataSource={filteredRooms}
                     pagination={{ pageSize: 10 }} // Increased default page size

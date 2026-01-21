@@ -1,13 +1,77 @@
-import React, { useEffect, useState } from 'react';
-import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty } from 'antd';
+import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty, Image, Tag } from 'antd';
 import {
-    HomeOutlined, ThunderboltOutlined, LineChartOutlined
+    HomeOutlined, ThunderboltOutlined, LineChartOutlined, GiftOutlined, CheckCircleOutlined
 } from '@ant-design/icons';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { auth, db } from '../../../firebase';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
+
+const TenantParcelList = ({ roomNumber }) => {
+    const [parcels, setParcels] = useState([]);
+
+    useEffect(() => {
+        if (!roomNumber) return;
+
+        // Listen for parcels for this room
+        const q = query(
+            collection(db, "parcels"),
+            where("roomId", "==", roomNumber),
+            // where("status", "==", "Arrived") // Optional: Show history too? Let's show all but sort.
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(d => ({ key: d.id, ...d.data() }));
+            // Sort by latest arrived
+            data.sort((a, b) => b.arrivedAt?.seconds - a.arrivedAt?.seconds);
+            setParcels(data);
+        });
+
+        return () => unsubscribe();
+    }, [roomNumber]);
+
+    if (parcels.length === 0) {
+        return (
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 flex items-center justify-center text-slate-300 gap-2">
+                <GiftOutlined />
+                <Text className="text-slate-400">ไม่มีพัสดุตกค้าง</Text>
+            </div>
+        );
+    }
+
+    return (
+        <div className="grid grid-cols-1 gap-4">
+            {parcels.map(p => (
+                <div key={p.key} className={`p-4 rounded-3xl border flex gap-4 items-start relative overflow-hidden transition-all ${p.status === 'Arrived' ? 'bg-orange-50 border-orange-100' : 'bg-white border-slate-100 opacity-60'}`}>
+                    <Image
+                        src={p.imageUrl}
+                        width={80}
+                        height={80}
+                        className="rounded-xl object-cover bg-white"
+                        fallback="https://placehold.co/100?text=Parcel"
+                    />
+                    <div className="flex-1 z-10">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <Text className={`text-[10px] font-black uppercase tracking-widest ${p.status === 'Arrived' ? 'text-orange-500' : 'text-green-500'}`}>
+                                    {p.carrier}
+                                </Text>
+                                <div className="font-bold text-slate-800 text-lg">{p.note || 'ไม่มีระบุรายละเอียด'}</div>
+                            </div>
+                            {p.status === 'Arrived' && <Tag color="orange" className="rounded-full px-3 border-none font-black text-[10px]">รอรับ</Tag>}
+                            {p.status === 'PickedUp' && <Tag color="green" className="rounded-full px-3 border-none font-black text-[10px]">รับแล้ว</Tag>}
+                        </div>
+                        <Text className="text-xs text-slate-400 mt-1 block">
+                            มาถึงเมื่อ: {dayjs(p.arrivedAt?.toDate()).format('D MMM HH:mm')}
+                        </Text>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
 
 const TenantPortal = () => {
     const [roomData, setRoomData] = useState(null);
@@ -67,7 +131,12 @@ const TenantPortal = () => {
             <Row gutter={[24, 24]}>
                 <Col xs={24} md={16}>
                     <div className="space-y-4">
-                        <Text className="font-black uppercase tracking-widest text-[10px] text-slate-400 px-4">สรุปค่าใช้จ่าย</Text>
+                        <Text className="font-black uppercase tracking-widest text-[10px] text-slate-400 px-4">พัสดุของคุณ (Parcels)</Text>
+                        <TenantParcelList roomNumber={roomData.id} />
+
+                        <div className="mt-8">
+                            <Text className="font-black uppercase tracking-widest text-[10px] text-slate-400 px-4">สรุปค่าใช้จ่าย</Text>
+                        </div>
                         {[
                             { label: 'ค่าเช่าห้อง', val: roomData.price, icon: <HomeOutlined /> },
                             { label: 'ค่าไฟ (120 หน่วย)', val: 840, icon: <ThunderboltOutlined /> },
