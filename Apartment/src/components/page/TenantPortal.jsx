@@ -54,7 +54,7 @@ const TenantPortal = () => (
                                 <Select defaultValue="repair" className="rounded-xl h-11"><Option value="repair">แจ้งซ่อมบำรุง</Option></Select>
                             </Form.Item>
                             <Form.Item label={<Text className="text-[10px] font-bold uppercase text-slate-400">รายละเอียด</Text>}>
-                                <Input.TextArea rows={4} placeholder="ระบุอาการเสีย..." className="rounded-xl border-slate-100" />
+                                <Input.TextArea rows={4} placeholder="ระบุอาการเสีย.." className="rounded-xl border-slate-100" />
                             </Form.Item>
                             <Button block className="h-12 rounded-2xl font-black text-[10px] uppercase tracking-widest border-slate-200 text-slate-500">ส่งเรื่องแจ้งซ่อม</Button>
                         </Form>
