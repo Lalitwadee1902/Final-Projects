@@ -340,8 +340,8 @@ const App = () => {
             </Space>
           </Header>
 
-          <Content className="p-10 bg-[#fafafa]/30">
-            <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <Content className="p-4 bg-[#fafafa]/30">
+            <div className="max-w-6xl mx-auto space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex justify-between items-end">
                 <div className="space-y-1">
                   <Text className="text-red-600 font-black tracking-widest text-[10px] uppercase">ศูนย์ควบคุม</Text>
@@ -357,7 +357,7 @@ const App = () => {
               {menu === 'phonebook' && <PhoneBook userRole={role} />}
               {menu === 'parcels' && <ParcelList />}
               {menu === 'market' && <Marketplace userRole={role} />}
-              {role === 'tenant' && menu === 'tenant_home' && <TenantPortal />}
+              {role === 'tenant' && menu === 'tenant_home' && <TenantPortal onNavigate={setMenu} />}
               {role === 'tenant' && menu === 'tenant_community' && <Community userRole={role} />}
               {role === 'tenant' && menu === 'tenant_phonebook' && <PhoneBook userRole={role} />}
               {menu === 'profile' && <Profile userData={currentUserData} />}
