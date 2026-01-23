@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Spin, message, List, Popover, Empty
+  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Spin, message, List, Popover, Empty, Dropdown
 } from 'antd';
 import {
   DashboardOutlined,
@@ -16,10 +16,11 @@ import {
   MessageOutlined,
   PhoneOutlined,
   GiftOutlined,
-  ShopOutlined
+  ShopOutlined,
+  UserOutlined
 } from '@ant-design/icons';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, onSnapshot, collection, query, orderBy, limit, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, orderBy, limit, updateDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import AdminDashboard from './components/page/AdminDashboard';
 import RoomList from './components/page/RoomList';
@@ -31,6 +32,7 @@ import Community from './components/page/Community';
 import PhoneBook from './components/page/PhoneBook';
 import ParcelList from './components/page/ParcelList';
 import Marketplace from './components/page/Marketplace';
+import Profile from './components/page/Profile';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/th';
@@ -41,7 +43,7 @@ dayjs.locale('th');
 const { Header, Content, Sider, Footer } = Layout;
 const { Title, Text } = Typography;
 
-const NotificationBell = ({ role, roomNumber }) => {
+const NotificationBell = ({ role, roomNumber, userId }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -54,27 +56,42 @@ const NotificationBell = ({ role, roomNumber }) => {
       // Filter based on Role
       const filteredData = allData.filter(n => {
         if (role === 'admin') {
-          // Admin sees everything EXCEPT 'parcel' notifications (which are for tenants)
           return n.type !== 'parcel';
         } else if (role === 'tenant') {
-          // Tenants see notifications for their room (parcels, bills, etc.)
-          // Assuming notifications for tenants always have 'roomId'
           return n.roomId === roomNumber;
         }
         return false;
       });
 
       setNotifications(filteredData);
-      setUnreadCount(filteredData.filter(n => !n.read).length);
+
+      // Check unread based on readBy array OR legacy read boolean
+      const unread = filteredData.filter(n => {
+        const isReadGlobal = n.read === true; // Legacy support
+        const isReadByUser = n.readBy && n.readBy.includes(userId);
+        return !isReadGlobal && !isReadByUser;
+      });
+
+      setUnreadCount(unread.length);
     });
     return () => unsubscribe();
-  }, [role, roomNumber]);
+  }, [role, roomNumber, userId]);
 
   const handleMarkAsRead = async () => {
-    // Mark all visible as read
-    const unread = notifications.filter(n => !n.read);
+    if (!userId) return;
+
+    // Find unread items for this user
+    const unread = notifications.filter(n => {
+      const isReadGlobal = n.read === true;
+      const isReadByUser = n.readBy && n.readBy.includes(userId);
+      return !isReadGlobal && !isReadByUser;
+    });
+
     unread.forEach(async (n) => {
-      await updateDoc(doc(db, "notifications", n.id), { read: true });
+      // Use arrayUnion to add userId to readBy array
+      await updateDoc(doc(db, "notifications", n.id), {
+        readBy: arrayUnion(userId)
+      });
     });
   };
 
@@ -87,24 +104,28 @@ const NotificationBell = ({ role, roomNumber }) => {
       <div className="max-h-[300px] overflow-y-auto">
         <List
           dataSource={notifications}
-          renderItem={item => (
-            <List.Item className={`px-2 py-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-lg mb-1 ${!item.read ? 'bg-red-50/50' : ''}`}>
-              <List.Item.Meta
-                avatar={
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === 'payment' ? 'bg-green-100 text-green-600' : item.type === 'parcel' ? 'bg-orange-100 text-orange-600' : 'bg-amber-100 text-amber-600'}`}>
-                    {item.type === 'payment' ? <CheckCircleOutlined /> : item.type === 'parcel' ? <GiftOutlined /> : <ToolOutlined />}
-                  </div>
-                }
-                title={<Text className="text-xs font-bold text-slate-700">{item.title}</Text>}
-                description={
-                  <div className="flex flex-col">
-                    <Text className="text-[10px] text-slate-500">{item.message}</Text>
-                    <Text className="text-[9px] text-slate-300 mt-1">{dayjs(item.createdAt?.toDate()).fromNow()}</Text>
-                  </div>
-                }
-              />
-            </List.Item>
-          )}
+          renderItem={item => {
+            const isRead = item.read === true || (item.readBy && item.readBy.includes(userId));
+            return (
+              <List.Item className={`px-2 py-3 cursor-pointer hover:bg-slate-50 transition-colors rounded-lg mb-1 ${!isRead ? 'bg-red-50/50' : ''}`}>
+
+                <List.Item.Meta
+                  avatar={
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === 'payment' ? 'bg-green-100 text-green-600' : item.type === 'parcel' ? 'bg-orange-100 text-orange-600' : 'bg-amber-100 text-amber-600'}`}>
+                      {item.type === 'payment' ? <CheckCircleOutlined /> : item.type === 'parcel' ? <GiftOutlined /> : <ToolOutlined />}
+                    </div>
+                  }
+                  title={<Text className="text-xs font-bold text-slate-700">{item.title}</Text>}
+                  description={
+                    <div className="flex flex-col">
+                      <Text className="text-[10px] text-slate-500">{item.message}</Text>
+                      <Text className="text-[9px] text-slate-300 mt-1">{dayjs(item.createdAt?.toDate()).fromNow()}</Text>
+                    </div>
+                  }
+                />
+              </List.Item>
+            );
+          }}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="ไม่มีการแจ้งเตือน" /> }}
         />
       </div>
@@ -112,7 +133,19 @@ const NotificationBell = ({ role, roomNumber }) => {
   );
 
   return (
-    <Popover content={content} trigger="click" placement="bottomRight" arrow={false} overlayInnerStyle={{ padding: '12px', borderRadius: '16px' }}>
+    <Popover
+      content={content}
+      trigger="click"
+      placement="bottomRight"
+      arrow={false}
+      overlayInnerStyle={{ padding: '12px', borderRadius: '16px' }}
+      onOpenChange={(visible) => {
+        // Auto mark as read when closing the popover
+        if (!visible) {
+          handleMarkAsRead();
+        }
+      }}
+    >
       <Badge count={unreadCount} overflowCount={99} color="#ef4444">
         <Button shape="circle" type="text" icon={<BellOutlined className={`text-lg transition-colors ${unreadCount > 0 ? 'text-slate-600 animate-pulse-slow' : 'text-slate-400'}`} />} />
       </Badge>
@@ -266,14 +299,41 @@ const App = () => {
               <input type="text" placeholder="ค้นหาห้อง หรือ บิล..." className="bg-transparent border-none outline-none text-xs w-full font-medium" />
             </div>
             <Space size="large">
-              <NotificationBell role={role} roomNumber={currentUserData?.roomNumber} />
-              <Space className="cursor-pointer hover:bg-slate-50 p-2 rounded-full transition-all pr-4 pl-1" onClick={handleLogout}>
-                <Avatar size={40} className="border-2 border-white shadow-md bg-slate-200" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`} />
-                <div className="flex flex-col text-right hidden lg:flex">
-                  <Text className="text-xs font-black text-slate-700">{role === 'admin' ? 'ผู้ดูแลระบบ' : 'คุณสมชาย'}</Text>
-                  <Text className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">{role === 'admin' ? 'Admin' : 'Tenant'}</Text>
-                </div>
-              </Space>
+              <NotificationBell role={role} roomNumber={currentUserData?.roomNumber} userId={auth.currentUser?.uid} />
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'profile',
+                      label: 'ข้อมูลส่วนตัว',
+                      icon: <UserOutlined />,
+                      onClick: () => setMenu('profile')
+                    },
+                    {
+                      type: 'divider'
+                    },
+                    {
+                      key: 'logout',
+                      label: 'ออกจากระบบ',
+                      icon: <LogoutOutlined />,
+                      danger: true,
+                      onClick: handleLogout
+                    }
+                  ]
+                }}
+                placement="bottomRight"
+                arrow={{ pointAtCenter: true }}
+              >
+                <Space className="cursor-pointer hover:bg-slate-50 p-2 rounded-full transition-all pr-4 pl-1">
+                  <Avatar size={40} className="border-2 border-white shadow-md bg-slate-200" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`} />
+                  <div className="flex flex-col text-right hidden lg:flex">
+                    <Text className="text-xs font-black text-slate-700">
+                      {currentUserData?.displayName || currentUserData?.name || (role === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน')}
+                    </Text>
+                    <Text className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">{role === 'admin' ? 'Admin' : 'Tenant'}</Text>
+                  </div>
+                </Space>
+              </Dropdown>
             </Space>
           </Header>
 
@@ -282,7 +342,7 @@ const App = () => {
               <div className="flex justify-between items-end">
                 <div className="space-y-1">
                   <Text className="text-red-600 font-black tracking-widest text-[10px] uppercase">ศูนย์ควบคุม</Text>
-                  <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : menu === 'billing' ? 'การจัดการบิล' : menu === 'maintenance' ? 'แจ้งซ่อม' : menu === 'community' ? 'ข่าวสาร/ชุมชน' : menu === 'phonebook' ? 'สมุดโทรศัพท์' : menu === 'parcels' ? 'จัดการพัสดุ' : menu === 'market' ? 'ตลาดลูกบ้าน' : 'หน้าหลักผู้เช่า'}</Title>
+                  <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : menu === 'billing' ? 'การจัดการบิล' : menu === 'maintenance' ? 'แจ้งซ่อม' : menu === 'community' ? 'ข่าวสาร/ชุมชน' : menu === 'phonebook' ? 'สมุดโทรศัพท์' : menu === 'parcels' ? 'จัดการพัสดุ' : menu === 'market' ? 'ตลาดลูกบ้าน' : menu === 'profile' ? 'ข้อมูลส่วนตัว' : 'หน้าหลักผู้เช่า'}</Title>
                 </div>
               </div>
 
@@ -297,6 +357,7 @@ const App = () => {
               {role === 'tenant' && menu === 'tenant_home' && <TenantPortal />}
               {role === 'tenant' && menu === 'tenant_community' && <Community userRole={role} />}
               {role === 'tenant' && menu === 'tenant_phonebook' && <PhoneBook userRole={role} />}
+              {menu === 'profile' && <Profile userData={currentUserData} />}
             </div>
           </Content>
 

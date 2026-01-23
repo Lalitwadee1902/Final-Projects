@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Tag, Button, Typography, message, Popconfirm, Space } from 'antd';
 import { ToolOutlined, CheckCircleOutlined } from '@ant-design/icons';
-import { collection, onSnapshot, doc, updateDoc, addDoc, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../firebase';
 
 const { Text, Title } = Typography;
@@ -28,8 +28,13 @@ const MaintenanceList = () => {
 
     const handleFinishRepair = async (room) => {
         try {
-            // Determine new status based on tenant presence
-            const newStatus = room.tenant && room.tenant !== '-' ? 'Occupied' : 'Vacant';
+            // 1. Check for active tenant in Users collection for robustness
+            // Use both room.tenant AND check the users collection to be safe
+            const userQuery = query(collection(db, "users"), where("roomNumber", "==", room.id));
+            const userSnapshot = await getDocs(userQuery);
+            const hasTenant = !userSnapshot.empty || (room.tenant && room.tenant !== '-');
+
+            const newStatus = hasTenant ? 'Occupied' : 'Vacant';
 
             // 1. Update Room Status
             await updateDoc(doc(db, "rooms", room.id), {
@@ -79,7 +84,7 @@ const MaintenanceList = () => {
             render: (_, record) => (
                 <Popconfirm
                     title="ยืนยันการซ่อมเสร็จ?"
-                    description={`ห้อง ${record.id} จะถูกปรับสถานะเป็น "${record.tenant && record.tenant !== '-' ? 'ไม่ว่าง' : 'ว่าง'}"`}
+                    description="เมื่อยืนยัน สถานะห้องจะถูกปรับปรุงตามข้อมูลผู้เช่าปัจจุบัน (ว่าง/ไม่ว่าง)"
                     onConfirm={() => handleFinishRepair(record)}
                     okText="ยืนยัน"
                     cancelText="ยกเลิก"
