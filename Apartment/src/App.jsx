@@ -27,6 +27,7 @@ import RoomList from './components/page/RoomList';
 import TenantPortal from './components/page/TenantPortal';
 import Login from './components/page/Login';
 import BillingList from './components/page/BillingList';
+import TenantBilling from './components/page/TenantBilling';
 import MaintenanceList from './components/page/MaintenanceList';
 import Community from './components/page/Community';
 import PhoneBook from './components/page/PhoneBook';
@@ -111,8 +112,8 @@ const NotificationBell = ({ role, roomNumber, userId }) => {
 
                 <List.Item.Meta
                   avatar={
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === 'payment' ? 'bg-green-100 text-green-600' : item.type === 'parcel' ? 'bg-orange-100 text-orange-600' : 'bg-amber-100 text-amber-600'}`}>
-                      {item.type === 'payment' ? <CheckCircleOutlined /> : item.type === 'parcel' ? <GiftOutlined /> : <ToolOutlined />}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.type === 'payment' || item.type === 'payment_verified' ? 'bg-green-100 text-green-600' : item.type === 'parcel' ? 'bg-orange-100 text-orange-600' : 'bg-amber-100 text-amber-600'}`}>
+                      {(item.type === 'payment' || item.type === 'payment_verified') ? <CheckCircleOutlined /> : item.type === 'parcel' ? <GiftOutlined /> : <ToolOutlined />}
                     </div>
                   }
                   title={<Text className="text-xs font-bold text-slate-700">{item.title}</Text>}
@@ -358,6 +359,7 @@ const App = () => {
               {menu === 'parcels' && <ParcelList />}
               {menu === 'market' && <Marketplace userRole={role} />}
               {role === 'tenant' && menu === 'tenant_home' && <TenantPortal />}
+              {role === 'tenant' && menu === 'tenant_bill' && <TenantBilling roomNumber={currentUserData?.roomNumber} />}
               {role === 'tenant' && menu === 'tenant_community' && <Community userRole={role} />}
               {role === 'tenant' && menu === 'tenant_phonebook' && <PhoneBook userRole={role} />}
               {menu === 'profile' && <Profile userData={currentUserData} />}
