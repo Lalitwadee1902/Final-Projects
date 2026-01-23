@@ -293,11 +293,8 @@ const App = () => {
         </Sider>
 
         <Layout className="bg-white ml-0 transition-all" style={{ marginLeft: collapsed ? 80 : 260 }}>
-          <Header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 px-10 flex justify-between items-center h-20 border-b border-slate-50">
-            <div className="flex items-center bg-slate-50 px-6 py-2 rounded-2xl border border-slate-100 w-96">
-              <SearchOutlined className="text-slate-300 mr-3" />
-              <input type="text" placeholder="ค้นหาห้อง หรือ บิล..." className="bg-transparent border-none outline-none text-xs w-full font-medium" />
-            </div>
+          <Header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 px-10 flex justify-end items-center h-20 border-b border-slate-50">
+
             <Space size="large">
               <NotificationBell role={role} roomNumber={currentUserData?.roomNumber} userId={auth.currentUser?.uid} />
               <Dropdown
