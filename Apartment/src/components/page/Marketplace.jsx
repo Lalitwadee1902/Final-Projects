@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button, Typography, Modal, Form, Input, Upload, message, Popconfirm, Image, Tag, Avatar, Badge, Empty, InputNumber } from 'antd';
-import { PlusOutlined, DeleteOutlined, ShopOutlined, UserOutlined, PhoneOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { Card, Button, Typography, Modal, Form, Input, Upload, message, Popconfirm, Image, Tag, Avatar, Badge, Empty, InputNumber, TimePicker, Select } from 'antd';
+import { PlusOutlined, DeleteOutlined, ShopOutlined, UserOutlined, PhoneOutlined, SafetyCertificateOutlined, LineOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, query, orderBy, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../../firebase';
 import dayjs from 'dayjs';
@@ -89,7 +89,10 @@ const Marketplace = ({ userRole }) => {
                 title: values.title,
                 price: values.price,
                 description: values.description || '',
-                contact: values.contact,
+                lineId: values.lineId || '',
+                phoneNumber: values.phoneNumber || '',
+                openingDays: values.openingDays || [],
+                openingHours: values.openingHours ? values.openingHours.map(t => t.format('HH:mm')) : null,
                 imageUrl: imageUrl,
                 sellerId: auth.currentUser.uid,
                 sellerName: sellerName,
@@ -189,10 +192,35 @@ const Marketplace = ({ userRole }) => {
                                         <Avatar size="small" icon={<UserOutlined />} className="bg-indigo-50 text-indigo-500" />
                                         <span>ผู้ขาย: <span className="font-bold text-slate-700">{item.sellerName}</span></span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                                        <Avatar size="small" icon={<PhoneOutlined />} className="bg-emerald-50 text-emerald-500" />
-                                        <span>ติดต่อ: <span className="font-bold text-slate-700 select-all">{item.contact}</span></span>
+                                    <div className="space-y-1">
+                                        {item.phoneNumber && (
+                                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                <Avatar size="small" icon={<PhoneOutlined />} className="bg-emerald-50 text-emerald-500" />
+                                                <span>โทร: <span className="font-bold text-slate-700 select-all">{item.phoneNumber}</span></span>
+                                            </div>
+                                        )}
+                                        {item.lineId && (
+                                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                <Avatar size="small" icon={<LineOutlined />} className="bg-green-50 text-green-500" />
+                                                <span>Line: <span className="font-bold text-slate-700 select-all">{item.lineId}</span></span>
+                                            </div>
+                                        )}
                                     </div>
+                                    {item.openingHours && (
+                                        <div className="flex flex-col gap-1 mt-1 bg-orange-50/50 p-2 rounded-lg border border-orange-100">
+                                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                                <Avatar size="small" icon={<ClockCircleOutlined />} className="bg-orange-100 text-orange-500" />
+                                                <div className="flex flex-col">
+                                                    {item.openingDays && item.openingDays.length > 0 && (
+                                                        <span className="font-bold text-slate-700 mb-0.5">
+                                                            {item.openingDays.length === 7 ? 'ทุกวัน' : item.openingDays.join(', ')}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-slate-600 font-medium">{item.openingHours[0]} - {item.openingHours[1]} น.</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -231,9 +259,55 @@ const Marketplace = ({ userRole }) => {
                         <TextArea rows={3} placeholder="สภาพสินค้า, อายุการใช้งาน, เหตุผลที่ขาย..." className="rounded-xl" />
                     </Form.Item>
 
-                    <Form.Item name="contact" label="เบอร์โทร / Line ID" rules={[{ required: true, message: 'ช่องทางติดต่อ' }]}>
-                        <Input prefix={<PhoneOutlined className="text-slate-400" />} placeholder="08x-xxx-xxxx" size="large" className="rounded-xl" />
-                    </Form.Item>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Form.Item
+                            name="phoneNumber"
+                            label="เบอร์โทรศัพท์"
+                            rules={[
+                                { pattern: /^\d{10}$/, message: 'เบอร์โทรต้องเป็นตัวเลข 10 หลัก' },
+                                ({ getFieldValue }) => ({
+                                    validator(_, value) {
+                                        if (value || getFieldValue('lineId')) {
+                                            return Promise.resolve();
+                                        }
+                                        return Promise.reject(new Error('ต้องกรอกเบอร์โทร หรือ Line ID อย่างน้อยหนึ่งอย่าง'));
+                                    },
+                                }),
+                            ]}
+                        >
+                            <Input prefix={<PhoneOutlined className="text-slate-400" />} placeholder="08xxxxxxxx" size="large" className="rounded-xl" maxLength={10} />
+                        </Form.Item>
+
+                        <Form.Item
+                            name="lineId"
+                            label="Line ID"
+                            rules={[
+                                ({ getFieldValue }) => ({
+                                    validator(_, value) {
+                                        if (value || getFieldValue('phoneNumber')) {
+                                            return Promise.resolve();
+                                        }
+                                        return Promise.reject(new Error('ต้องกรอกเบอร์โทร หรือ Line ID อย่างน้อยหนึ่งอย่าง'));
+                                    },
+                                }),
+                            ]}
+                        >
+                            <Input prefix={<LineOutlined className="text-slate-400" />} placeholder="ไอดีไลน์" size="large" className="rounded-xl" />
+                        </Form.Item>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Form.Item name="openingDays" label="วันทำการ (Optional)">
+                            <Select mode="multiple" placeholder="เลือกวันที่เปิด" allowClear size="large" className="rounded-xl" maxTagCount="responsive">
+                                {['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'].map(day => (
+                                    <Select.Option key={day} value={day}>{day}</Select.Option>
+                                ))}
+                            </Select>
+                        </Form.Item>
+                        <Form.Item name="openingHours" label="เวลาทำการ (Optional)">
+                            <TimePicker.RangePicker format="HH:mm" className="w-full rounded-xl" size="large" placeholder={['เวลาเปิด', 'เวลาปิด']} />
+                        </Form.Item>
+                    </div>
 
                     <Form.Item label="รูปภาพสินค้า" required>
                         <Upload
