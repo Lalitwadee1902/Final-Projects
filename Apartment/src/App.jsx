@@ -161,6 +161,12 @@ const App = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState('dashboard');
   const [currentUserData, setCurrentUserData] = useState(null);
+  const [billingNavigationFilter, setBillingNavigationFilter] = useState(null);
+
+  const handleNavigateToBilling = (filter) => {
+    setBillingNavigationFilter(filter);
+    setMenu('billing');
+  };
 
   useEffect(() => {
     let unsubDoc; // Variable to hold the snapshot unsubscribe function
@@ -343,9 +349,9 @@ const App = () => {
                 </div>
               </div>
 
-              {menu === 'dashboard' && <AdminDashboard />}
+              {menu === 'dashboard' && <AdminDashboard onNavigateToBilling={handleNavigateToBilling} />}
               {menu === 'rooms' && <RoomList />}
-              {menu === 'billing' && <BillingList />}
+              {menu === 'billing' && <BillingList initialFilters={billingNavigationFilter} />}
               {menu === 'maintenance' && <MaintenanceList />}
               {menu === 'community' && <Community userRole={role} />}
               {menu === 'phonebook' && <PhoneBook userRole={role} />}
