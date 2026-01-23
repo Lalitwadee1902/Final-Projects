@@ -1,4 +1,4 @@
-import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty, Image, Tag, Upload, message } from 'antd';
+import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty, Image, Tag, Upload, message, Popover } from 'antd';
 import {
     HomeOutlined, ThunderboltOutlined, LineChartOutlined, GiftOutlined, CheckCircleOutlined, UploadOutlined
 } from '@ant-design/icons';
@@ -146,7 +146,20 @@ const TenantBillList = ({ roomNumber }) => {
                     </Space>
 
                     <div className="flex items-center gap-4">
-                        <Text className="text-xl font-black text-slate-700">฿{b.amount.toLocaleString()}</Text>
+                        <Popover
+                            content={
+                                b.details ? (
+                                    <div className="text-xs space-y-1">
+                                        <div className="flex justify-between gap-4"><Text>ค่าห้อง:</Text> <Text>฿{b.details.rent?.toLocaleString()}</Text></div>
+                                        <div className="flex justify-between gap-4"><Text>ค่าน้ำ:</Text> <Text>฿{b.details.water?.toLocaleString()}</Text></div>
+                                        <div className="flex justify-between gap-4"><Text>ค่าไฟ:</Text> <Text>฿{b.details.electricity?.toLocaleString()}</Text></div>
+                                    </div>
+                                ) : 'ไม่มีรายละเอียด'
+                            }
+                            title="รายละเอียด"
+                        >
+                            <Text className="text-xl font-black text-slate-700 cursor-pointer underline decoration-dotted">฿{b.amount.toLocaleString()}</Text>
+                        </Popover>
                         {b.status === 'Pending' && (
                             <Upload
                                 showUploadList={false}
