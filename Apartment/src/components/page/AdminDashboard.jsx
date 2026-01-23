@@ -15,7 +15,7 @@ dayjs.locale('th');
 
 const { Text } = Typography;
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ onNavigateToBilling }) => {
     const [loading, setLoading] = useState(true);
     const [seeding, setSeeding] = useState(false);
     const [stats, setStats] = useState({
@@ -72,15 +72,20 @@ const AdminDashboard = () => {
                 if (bill.dueDate) {
                     const d = dayjs(bill.dueDate);
                     const key = d.format('MMM');
+                    const fullDate = d.format('YYYY-MM-DD'); // Store full date for filtering
                     if (months.hasOwnProperty(key)) {
-                        months[key] += (Number(bill.amount) || 0);
+                        months[key] = {
+                            amount: (months[key]?.amount || 0) + (Number(bill.amount) || 0),
+                            date: fullDate
+                        };
                     }
                 }
             });
 
             const incomeChart = Object.keys(months).map(m => ({
                 name: m,
-                income: months[m]
+                income: months[m]?.amount || 0,
+                date: months[m]?.date || null
             }));
 
             setStats({
@@ -98,17 +103,6 @@ const AdminDashboard = () => {
         // Listeners
         const unsubRooms = onSnapshot(collection(db, "rooms"), (roomSnap) => {
             const rooms = roomSnap.docs.map(d => d.data());
-            // We need bills too, so we nest or separate listeners?
-            // Since we need to join logic, let's keep local state or just separate listeners.
-            // Separating listeners might cause double renders but is cleaner.
-            // Let's simpler approach: Listener for rooms, Listener for bills.
-            // But we need to combine them for the single 'loading' state maybe?
-            // Actually, stats are independent except the final render.
-            // Let's use a ref or just updating state independently is fine.
-            // To simplify, let's just trigger update when either changes.
-            // But we need both data sets.
-            // We can use a simpler pattern: 
-            // Just update room stats here.
         });
 
         // Better Implementation: Parallel Subscriptions
@@ -269,7 +263,7 @@ const AdminDashboard = () => {
 
             <Row gutter={[20, 20]}>
                 <Col xs={24} lg={16}>
-                    <Card bordered={false} title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">กระแสรายได้ (6 เดือนล่าสุด)</Text>} className="shadow-sm rounded-2xl">
+                    <Card bordered={false} title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">กระแสรายได้ (6 เดือนล่าสุด) - คลิกเพื่อดูรายละเอียด</Text>} className="shadow-sm rounded-2xl">
                         <div className="h-[300px] w-full mt-4">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={monthlyData}>
@@ -286,6 +280,12 @@ const AdminDashboard = () => {
                                         fill="#dc2626"
                                         radius={[6, 6, 0, 0]}
                                         barSize={40}
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={(data) => {
+                                            if (onNavigateToBilling && data && data.date) {
+                                                onNavigateToBilling({ month: data.date, status: 'Paid' });
+                                            }
+                                        }}
                                     />
                                 </BarChart>
                             </ResponsiveContainer>

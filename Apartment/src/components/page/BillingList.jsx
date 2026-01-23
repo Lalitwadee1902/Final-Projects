@@ -8,7 +8,7 @@ import dayjs from 'dayjs';
 const { Text } = Typography;
 const { Option } = Select;
 
-const BillingList = () => {
+const BillingList = ({ initialFilters }) => {
     const [bills, setBills] = useState([]);
     const [rooms, setRooms] = useState([]);
     const [isModalVisible, setIsModalVisible] = useState(false);
@@ -19,6 +19,14 @@ const BillingList = () => {
     const [searchText, setSearchText] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
     const [monthFilter, setMonthFilter] = useState(null);
+
+    // Apply initial filters if provided
+    useEffect(() => {
+        if (initialFilters) {
+            if (initialFilters.status) setStatusFilter(initialFilters.status);
+            if (initialFilters.month) setMonthFilter(dayjs(initialFilters.month));
+        }
+    }, [initialFilters]);
 
     // Selection
     const [selectedRowKeys, setSelectedRowKeys] = useState([]);
@@ -269,6 +277,7 @@ const BillingList = () => {
                     />
                     <Select
                         defaultValue="All"
+                        value={statusFilter}
                         style={{ width: 150 }}
                         onChange={setStatusFilter}
                         className="rounded-lg"
@@ -282,6 +291,7 @@ const BillingList = () => {
                         picker="month"
                         placeholder="เลือกเดือน"
                         onChange={setMonthFilter}
+                        value={monthFilter}
                         className="rounded-lg w-[150px]"
                         format={'MMM YYYY'}
                     />
