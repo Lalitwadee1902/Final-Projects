@@ -102,7 +102,7 @@ const PhoneBook = ({ userRole }) => {
             <Row gutter={[24, 24]}>
                 {contacts.map(contact => (
                     <Col xs={24} sm={12} lg={8} key={contact.id}>
-                        <Card bordered={false} className="shadow-sm border border-slate-50 rounded-3xl hover:shadow-md transition-all group">
+                        <Card variant="borderless" className="shadow-sm border border-slate-50 rounded-3xl hover:shadow-md transition-all group">
                             <div className="flex justify-between items-start mb-4">
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl bg-${getColor(contact.category)}-50 text-${getColor(contact.category)}-500`}>
                                     {getIcon(contact.category)}

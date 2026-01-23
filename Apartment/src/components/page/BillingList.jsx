@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Image, Popover, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseOutlined, FileSearchOutlined, FileTextOutlined, CheckSquareOutlined } from '@ant-design/icons';
+import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Image, Tooltip, Badge } from 'antd';
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseOutlined, FileSearchOutlined, DownOutlined, RightOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import dayjs from 'dayjs';
@@ -20,6 +20,16 @@ const BillingList = () => {
     // Filters
     const [searchText, setSearchText] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
+    const [monthFilter, setMonthFilter] = useState(null);
+
+    // Image Preview State
+    const [previewImage, setPreviewImage] = useState('');
+    const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+
+    const handlePreview = (url) => {
+        setPreviewImage(url);
+        setIsPreviewVisible(true);
+    };
 
     // Fetch Bills Real-time
     useEffect(() => {
@@ -47,8 +57,12 @@ const BillingList = () => {
     }, []);
 
     // Fetch Rooms for Dropdown
+    const [userMap, setUserMap] = useState({});
+
+    // Fetch Rooms and Users for Dropdown Sync
     useEffect(() => {
-        const unsubscribe = onSnapshot(collection(db, "rooms"), (snapshot) => {
+        // 1. Fetch Rooms
+        const unsubRooms = onSnapshot(collection(db, "rooms"), (snapshot) => {
             const roomData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -56,31 +70,57 @@ const BillingList = () => {
             roomData.sort((a, b) => a.id.localeCompare(b.id));
             setRooms(roomData);
         });
-        return () => unsubscribe();
+
+        // 2. Fetch Users to Map Tenant Names (Source of Truth)
+        const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+            const mapping = {};
+            snapshot.docs.forEach(doc => {
+                const u = doc.data();
+                if (u.roomNumber) {
+                    // Prefer displayName, then name, then 'User'
+                    mapping[u.roomNumber] = u.displayName || u.name || 'ผู้เช่า';
+                }
+            });
+            setUserMap(mapping);
+        });
+
+        return () => {
+            unsubRooms();
+            unsubUsers();
+        };
     }, []);
 
     // Grouping Logic
     const groupedBills = Object.values(bills.reduce((acc, bill) => {
+        // Support both roomNumber (new) and room (legacy)
+        const targetRoom = bill.roomNumber || bill.room;
+        if (!targetRoom) return acc;
+
         const monthKey = `ค่าเช่าเดือน ${dayjs(bill.dueDate).format('MMMM YYYY')}`;
-        const key = `${bill.room}-${monthKey}`;
+        const key = `${targetRoom}-${monthKey}`;
 
         if (!acc[key]) {
             acc[key] = {
                 key: key,
-                room: bill.room,
+                room: targetRoom,
                 month: monthKey,
                 rawDate: bill.dueDate,
                 totalAmount: 0,
                 billIds: [],
                 bills: [],
                 status: 'Paid', // Default to Paid, downgrade if any pending
-                hasPendingReview: false
+                paymentSlip: null,
+                paidAt: null
             };
         }
 
         acc[key].billIds.push(bill.key);
         acc[key].bills.push(bill);
         acc[key].totalAmount += Number(bill.amount || 0);
+
+        // Capture slip if any bill in group has it
+        if (bill.paymentSlip) acc[key].paymentSlip = bill.paymentSlip;
+        if (bill.paidAt && !acc[key].paidAt) acc[key].paidAt = bill.paidAt;
 
         // Status Hierarchy: Overdue > Pending > Pending Review > Paid
         const currentStatus = acc[key].status;
@@ -90,9 +130,8 @@ const BillingList = () => {
             acc[key].status = 'Pending';
         } else if (bill.status === 'Pending Review' && currentStatus !== 'Overdue' && currentStatus !== 'Pending') {
             acc[key].status = 'Pending Review';
-            acc[key].hasPendingReview = true;
         } else if (bill.status !== 'Paid' && currentStatus === 'Paid') {
-            acc[key].status = bill.status; // First non-paid status found
+            acc[key].status = bill.status;
         }
 
         return acc;
@@ -105,12 +144,17 @@ const BillingList = () => {
 
         let matchesStatus = true;
         if (statusFilter !== 'All') {
-            // Exact match for status filter or mapped
             matchesStatus = group.status === statusFilter;
             if (statusFilter === 'Pending' && group.status === 'Pending Review') matchesStatus = false;
         }
 
-        return matchesSearch && matchesStatus;
+        let matchesMonth = true;
+        if (monthFilter) {
+            const groupDate = dayjs(group.rawDate);
+            matchesMonth = groupDate.format('YYYY-MM') === monthFilter.format('YYYY-MM');
+        }
+
+        return matchesSearch && matchesStatus && matchesMonth;
     });
 
     // Sort: Date Descending
@@ -120,25 +164,38 @@ const BillingList = () => {
     const handleCreateBill = async (values) => {
         setLoading(true);
         try {
-            const rent = values.rent || 0;
-            const water = values.water || 0;
-            const electricity = values.electricity || 0;
-            const totalAmount = rent + water + electricity;
-
-            await addDoc(collection(db, "bills"), {
-                room: values.room,
-                amount: totalAmount,
-                details: {
-                    rent: rent,
-                    water: water,
-                    electricity: electricity
-                },
+            const commonData = {
+                room: values.room, // Maintain legacy field
+                roomNumber: values.room, // Add requested field
                 dueDate: values.dueDate.format('YYYY-MM-DD'),
                 status: 'Pending',
-                type: 'Rent+Utilities',
                 createdAt: new Date()
-            });
-            message.success('สร้างบิลสำเร็จ');
+            };
+
+            const billsToCreate = [];
+
+            if (values.rentAmount > 0) {
+                billsToCreate.push({ ...commonData, amount: values.rentAmount, type: 'ค่าเช่า (Rent)' });
+            }
+            if (values.waterAmount > 0) {
+                billsToCreate.push({ ...commonData, amount: values.waterAmount, type: 'ค่าน้ำ (Water)' });
+            }
+            if (values.elecAmount > 0) {
+                billsToCreate.push({ ...commonData, amount: values.elecAmount, type: 'ค่าไฟ (Electricity)' });
+            }
+            if (values.maintenanceAmount > 0) {
+                billsToCreate.push({ ...commonData, amount: values.maintenanceAmount, type: 'ซ่อมบำรุง (Maintenance)' });
+            }
+
+            if (billsToCreate.length === 0) {
+                message.warning('กรุณาระบุยอดเงินอย่างน้อย 1 รายการ');
+                setLoading(false);
+                return;
+            }
+
+            await Promise.all(billsToCreate.map(b => addDoc(collection(db, "bills"), b)));
+
+            message.success(`สร้างบิล ${billsToCreate.length} รายการสำเร็จ`);
             setIsModalVisible(false);
             form.resetFields();
         } catch (error) {
@@ -184,6 +241,35 @@ const BillingList = () => {
         }
     };
 
+    // Expanded Row: Shows details of bills in the group
+    const expandedRowRender = (record) => {
+        return (
+            <div className="space-y-3 p-2 bg-white rounded-2xl">
+                {record.bills.map((bill, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl hover:bg-slate-100 transition-colors border border-slate-100">
+                        <div className="flex items-center gap-4">
+                            <div className="flex flex-col">
+                                <Text className="font-bold text-slate-700 text-base">{bill.type || 'ค่าใช้จ่ายทั่วไป'}</Text>
+                                <Text className="text-xs text-slate-400">ครบกำหนด: {dayjs(bill.dueDate).format('D MMM YYYY')}</Text>
+                            </div>
+                        </div>
+                        <div className="text-right flex flex-col items-end gap-1">
+                            <Text className="font-black text-slate-800 text-base">฿{bill.amount.toLocaleString()}</Text>
+                            <Tag className="m-0 rounded-full text-[10px] font-bold border-none px-2.5 py-0.5"
+                                color={bill.status === 'Paid' ? '#dcfce7' : bill.status === 'Pending Review' ? '#ffedd5' : '#fee2e2'}
+                            >
+                                <span style={{ color: bill.status === 'Paid' ? '#15803d' : bill.status === 'Pending Review' ? '#c2410c' : '#b91c1c' }}>
+                                    {bill.status === 'Pending' ? 'รอชำระ' : bill.status === 'Paid' ? 'ตรวจสอบแล้ว' : bill.status === 'Pending Review' ? 'รอตรวจสอบ' : 'เกินกำหนด'}
+                                </span>
+                            </Tag>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    // Columns for the Main Table (Groups)
     const columns = [
         {
             title: 'ห้อง',
@@ -193,33 +279,6 @@ const BillingList = () => {
         },
         {
             title: 'รายการ',
-            dataIndex: 'type',
-            key: 'type',
-            render: (t) => <Text className="text-slate-500">{t || 'Rent'}</Text>
-        },
-        {
-            title: 'ยอดชำระ',
-            dataIndex: 'amount',
-            key: 'amount',
-            render: (v, record) => (
-                <Popover
-                    content={
-                        record.details ? (
-                            <div className="text-xs space-y-1">
-                                <div className="flex justify-between gap-4"><Text>ค่าห้อง:</Text> <Text>฿{record.details.rent?.toLocaleString()}</Text></div>
-                                <div className="flex justify-between gap-4"><Text>ค่าน้ำ:</Text> <Text>฿{record.details.water?.toLocaleString()}</Text></div>
-                                <div className="flex justify-between gap-4"><Text>ค่าไฟ:</Text> <Text>฿{record.details.electricity?.toLocaleString()}</Text></div>
-                            </div>
-                        ) : 'ไม่มีรายละเอียด'
-                    }
-                    title="รายละเอียดยอดชำระ"
-                >
-                    <Text className="font-bold text-slate-900 cursor-pointer underline decoration-dotted">฿{v.toLocaleString()}</Text>
-                </Popover>
-            )
-        },
-        {
-            title: 'ประจำเดือน',
             dataIndex: 'month',
             key: 'month',
             render: (t) => <Text className="font-bold text-slate-600">{t}</Text>
@@ -229,6 +288,21 @@ const BillingList = () => {
             dataIndex: 'totalAmount',
             key: 'totalAmount',
             render: (v) => <Text className="font-black text-slate-900 text-lg">฿{v.toLocaleString()}</Text>
+        },
+        {
+            title: 'กำหนดชำระ',
+            dataIndex: 'rawDate',
+            key: 'rawDate',
+            render: (d) => <Text className="text-slate-500 font-bold">{dayjs(d).format('D MMM YYYY')}</Text>
+        },
+        {
+            title: 'ชำระเมื่อ',
+            key: 'paidAt',
+            render: (_, record) => record.paidAt ? (
+                <Text className="text-slate-500 text-xs">
+                    {dayjs(record.paidAt.toDate ? record.paidAt.toDate() : record.paidAt).format('D MMM YYYY HH:mm')}
+                </Text>
+            ) : <Text className="text-slate-300">-</Text>
         },
         {
             title: 'สถานะ',
@@ -249,50 +323,25 @@ const BillingList = () => {
             )
         },
         {
-            title: 'วันที่จ่าย',
-            key: 'paidAt',
-            render: (_, record) => {
-                if (record.status !== 'Paid') return <Text className="text-slate-300">-</Text>;
-                if (record.paidAt) {
-                    return (
-                        <div className="flex flex-col">
-                            <Text className="text-xs font-bold text-slate-700">{dayjs(record.paidAt.toDate()).format('DD/MM/YYYY')}</Text>
-                            <Text className="text-[10px] text-slate-400">{dayjs(record.paidAt.toDate()).format('HH:mm')}</Text>
-                        </div>
-                    );
-                }
-                return <Text className="text-slate-300 text-xs">-</Text>;
-            }
+            title: 'ข้อมูล',
+            key: 'info',
+            render: (_, record) => record.paymentSlip && (
+                <Tooltip title="กดเพื่อดูสลิป">
+                    <Button
+                        type="dashed"
+                        shape="circle"
+                        icon={<FileSearchOutlined />}
+                        onClick={() => handlePreview(record.paymentSlip)}
+                        className="border-slate-300 text-slate-500 hover:text-blue-500 hover:border-blue-500 bg-white"
+                    />
+                </Tooltip>
+            )
         },
         {
-            title: '',
+            title: 'การกระทำ',
             key: 'action',
             render: (_, record) => (
                 <Space>
-                    {record.status === 'Pending Review' && (
-                        <Button
-                            type="primary"
-                            className="bg-orange-500 hover:bg-orange-600 border-none font-bold shadow-md shadow-orange-200"
-                            icon={<FileSearchOutlined />}
-                            onClick={() => {
-                                // View Slip Logic - Could open a modal with the slip image from the first bill that has one
-                                const billWithSlip = record.bills.find(b => b.paymentSlip);
-                                if (billWithSlip?.paymentSlip) {
-                                    Modal.info({
-                                        title: 'หลักฐานการโอนเงิน',
-                                        content: <img src={billWithSlip.paymentSlip} alt="slip" className="w-full rounded-lg" />,
-                                        width: 400,
-                                        okText: 'ปิด',
-                                        maskClosable: true
-                                    });
-                                } else {
-                                    message.info('ไม่พบหลักฐานการโอน');
-                                }
-                            }}
-                        >
-                            ดูสลิป
-                        </Button>
-                    )}
                     {record.status !== 'Paid' && (
                         <Popconfirm title="ยืนยันว่าชำระครบถ้วนแล้ว?" onConfirm={() => handleVerifyGroup(record)}>
                             <Button
@@ -315,11 +364,11 @@ const BillingList = () => {
     return (
         <>
             <Card
-                bordered={false}
+                variant="borderless"
                 title={
                     <div className="flex flex-col">
                         <Text className="font-black text-lg">รายการบิลเรียกเก็บ (รายเดือน)</Text>
-                        <Text className="text-xs text-slate-400 font-normal">จัดการบิลค่าเช่ารวมตามห้องพัก</Text>
+                        <Text className="text-xs text-slate-400 font-normal">จัดการบิลค่าเช่าและค่าน้ำค่าไฟ</Text>
                     </div>
                 }
                 extra={
@@ -337,8 +386,8 @@ const BillingList = () => {
             >
                 <div className="mb-4 flex flex-wrap gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
                     <Input
-                        placeholder="🔍 ค้นหาห้อง หรือ เดือน..."
-                        style={{ width: 200 }}
+                        placeholder="🔍 ค้นหาห้อง..."
+                        style={{ width: 150 }}
                         value={searchText}
                         onChange={e => setSearchText(e.target.value)}
                         className="rounded-lg"
@@ -355,6 +404,13 @@ const BillingList = () => {
                         <Option value="Paid">ชำระแล้ว</Option>
                         <Option value="Overdue">เกินกำหนด</Option>
                     </Select>
+                    <DatePicker
+                        picker="month"
+                        placeholder="เลือกเดือน"
+                        onChange={setMonthFilter}
+                        className="rounded-lg w-[150px]"
+                        format={'MMM YYYY'}
+                    />
                     <div className="flex-1 text-right text-xs text-slate-400 self-center">
                         เจอทั้งหมด {filteredGroupedBills.length} รายการ (เดือน)
                     </div>
@@ -363,6 +419,15 @@ const BillingList = () => {
                     columns={columns}
                     dataSource={filteredGroupedBills}
                     pagination={{ pageSize: 10 }}
+                    expandable={{
+                        expandedRowRender,
+                        expandIcon: ({ expanded, onExpand, record }) =>
+                            expanded ? (
+                                <DownOutlined onClick={e => onExpand(record, e)} />
+                            ) : (
+                                <RightOutlined onClick={e => onExpand(record, e)} />
+                            )
+                    }}
                 />
             </Card>
 
@@ -371,53 +436,82 @@ const BillingList = () => {
                 open={isModalVisible}
                 onCancel={() => setIsModalVisible(false)}
                 footer={null}
-                destroyOnClose
+                destroyOnHidden
             >
-                <Form layout="vertical" onFinish={handleCreateBill} form={form} initialValues={{ rent: 4500, water: 100, electricity: 500 }}>
-                    <p className="text-xs text-slate-400 mb-4 bg-yellow-50 p-2 rounded border border-yellow-100 text-orange-600">
-                        * บิลจะถูกรวมยอดอัตโนมัติตาม "ห้อง" และ "เดือนที่กำหนดชำระ" ในหน้ารวมบิล
+                <Form layout="vertical" onFinish={handleCreateBill} form={form}>
+                    <p className="text-xs text-slate-400 mb-4 bg-blue-50 p-2 rounded border border-blue-100 text-blue-600">
+                        * สามารถระบุยอดหลายรายการพร้อมกันได้ ระบบจะสร้างบิลแยกแต่ละรายการให้อัตโนมัติ
                     </p>
-                    <Form.Item name="room" label="ห้อง" rules={[{ required: true, message: 'กรุณาเลือกห้อง' }]}>
-                        <Select placeholder="เลือกห้อง">
-                            {rooms.map(r => (
-                                <Option key={r.id} value={r.id}>{r.id} ({r.tenant})</Option>
-                            ))}
-                        </Select>
-                    </Form.Item>
 
-                    <div className="flex gap-2">
-                        <Form.Item name="rent" label="ค่าห้อง" className="flex-1" rules={[{ required: true }]}>
-                            <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                    <Space className="w-full mb-2" align="start">
+                        <Form.Item name="room" label="ห้อง" rules={[{ required: true, message: 'เลือกห้อง' }]} className="w-[150px]">
+                            <Select placeholder="เลือกห้อง" showSearch optionFilterProp="children">
+                                {rooms.map(r => {
+                                    // Use name from User table if available, else fallback to room's tenant field or '-'
+                                    const tenantName = userMap[r.id] || r.tenant || '-';
+                                    const display = r.id + (tenantName !== '-' ? ` (${tenantName})` : ' (-)');
+                                    return <Option key={r.id} value={r.id}>{display}</Option>;
+                                })}
+                            </Select>
                         </Form.Item>
-                        <Form.Item name="water" label="ค่าน้ำ" className="flex-1" rules={[{ required: true }]}>
-                            <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                        <Form.Item name="dueDate" label="กำหนดชำระ" rules={[{ required: true, message: 'เลือกวันที่' }]} className="flex-1">
+                            <DatePicker style={{ width: '100%' }} />
                         </Form.Item>
-                        <Form.Item name="electricity" label="ค่าไฟ" className="flex-1" rules={[{ required: true }]}>
-                            <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                    </Space>
+
+                    <div className="bg-slate-50 p-4 rounded-xl space-y-2 border border-slate-100">
+                        <Form.Item name="rentAmount" label="🏡 ค่าเช่า - Rent (บาท)" className="mb-2">
+                            <InputNumber style={{ width: '100%' }} placeholder="0.00" formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                        </Form.Item>
+
+                        <Space className="w-full" align="baseline">
+                            <Form.Item name="waterAmount" label="💧 ค่าน้ำ - Water" className="mb-0 flex-1">
+                                <InputNumber style={{ width: '100%' }} placeholder="0.00" />
+                            </Form.Item>
+                            <Form.Item name="elecAmount" label="⚡ ค่าไฟ - Electricity" className="mb-0 flex-1">
+                                <InputNumber style={{ width: '100%' }} placeholder="0.00" />
+                            </Form.Item>
+                        </Space>
+
+                        <Form.Item name="maintenanceAmount" label="🔧 ซ่อมบำรุง - Maintenance (ถ้ามี)" className="mb-0 mt-2">
+                            <InputNumber style={{ width: '100%' }} placeholder="0.00" />
                         </Form.Item>
                     </div>
 
-                    <Form.Item name="dueDate" label="กำหนดชำระ" rules={[{ required: true }]}>
-                        <DatePicker style={{ width: '100%' }} />
-                    </Form.Item>
-
-                    <Form.Item shouldUpdate={(prevValues, curValues) => prevValues.rent !== curValues.rent || prevValues.water !== curValues.water || prevValues.electricity !== curValues.electricity}>
-                        {() => {
-                            const rent = form.getFieldValue('rent') || 0;
-                            const water = form.getFieldValue('water') || 0;
-                            const electricity = form.getFieldValue('electricity') || 0;
-                            const total = rent + water + electricity;
-                            return (
-                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex justify-between items-center mb-4">
-                                    <Text className="text-slate-500 font-bold">ยอดสุทธิ (Total)</Text>
-                                    <Text className="text-2xl font-black text-slate-800">฿{total.toLocaleString()}</Text>
-                                </div>
-                            );
-                        }}
-                    </Form.Item>
-
-                    <Button type="primary" htmlType="submit" loading={loading} block danger className="h-10 font-bold">สร้างบิล</Button>
+                    <Button type="primary" htmlType="submit" loading={loading} block danger className="h-10 font-bold mt-4">บันทึกบิล</Button>
                 </Form>
+            </Modal>
+
+            <Modal
+                open={isPreviewVisible}
+                title="หลักฐานการโอนเงิน (Slip)"
+                footer={null}
+                onCancel={() => setIsPreviewVisible(false)}
+                centered
+                width={450}
+            >
+                {previewImage ? (
+                    <div className="flex flex-col gap-2">
+                        <img
+                            src={previewImage}
+                            alt="Slip"
+                            className="w-full rounded-lg shadow-sm"
+                            onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = "https://placehold.co/400x600?text=Image+Error";
+                            }}
+                        />
+                        <a href={previewImage} download="slip.png" target="_blank" rel="noreferrer" className="text-center text-blue-500 text-xs mt-2 hover:underline">
+                            เปิดรูปภาพในแท็บใหม่ / ดาวน์โหลด
+                        </a>
+                    </div>
+                ) : (
+                    <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-lg border border-slate-100 border-dashed">
+                        <FileSearchOutlined className="text-4xl mb-2" />
+                        <Text className="block text-sm">ไม่พบรูปภาพสลิป</Text>
+                        <Text className="text-xs text-slate-300">อาจเกิดจากรูปแบบไฟล์ไม่ถูกต้องหรือลิงก์เสีย</Text>
+                    </div>
+                )}
             </Modal>
         </>
     );

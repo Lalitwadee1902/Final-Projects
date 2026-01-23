@@ -129,7 +129,7 @@ const Marketplace = ({ userRole }) => {
 
     return (
         <div className="space-y-6">
-            <Card bordered={false} className="shadow-sm rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 border-none relative overflow-hidden">
+            <Card variant="borderless" className="shadow-sm rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 border-none relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full -mr-16 -mt-16 blur-2xl pointer-events-none"></div>
                 <div className="flex justify-between items-center relative z-10 px-4 py-2">
                     <div className="text-white">

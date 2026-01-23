@@ -199,7 +199,7 @@ const TenantPortal = ({ onNavigate }) => {
                 {/* Left Col: Chart & Market */}
                 <Col xs={24} lg={16} className="space-y-6">
                     {/* Expense Chart */}
-                    <Card bordered={false} className="shadow-sm rounded-2xl" title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">ค่าใช้จ่ายรอบ 6 เดือน (Expenses)</Text>}>
+                    <Card variant="borderless" className="shadow-sm rounded-2xl" title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">ค่าใช้จ่ายรอบ 6 เดือน (Expenses)</Text>}>
                         <div className="h-[300px] w-full mt-2">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={MOCK_EXPENSE_DATA}>
@@ -215,7 +215,7 @@ const TenantPortal = ({ onNavigate }) => {
                     </Card>
 
                     {/* Community Market (Replaced Pending Bills) */}
-                    <Card bordered={false} className="shadow-sm rounded-2xl"
+                    <Card variant="borderless" className="shadow-sm rounded-2xl"
                         title={<div className="flex justify-between items-center"><Text className="font-black uppercase tracking-tight text-xs text-slate-500">ตลาดชุมชน (Community Market)</Text><Button type="link" size="small" className="text-xs p-0 text-slate-400">ดูทั้งหมด</Button></div>}
                     >
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -288,7 +288,7 @@ const TenantPortal = ({ onNavigate }) => {
                     </Row>
 
                     {/* Parcels */}
-                    <Card bordered={false} className="shadow-sm rounded-2xl" title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">พัสดุมาใหม่ (New Parcels)</Text>}>
+                    <Card variant="borderless" className="shadow-sm rounded-2xl" title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">พัสดุมาใหม่ (New Parcels)</Text>}>
                         {parcels.length > 0 ? (
                             <div className="space-y-3">
                                 {parcels.map(p => (

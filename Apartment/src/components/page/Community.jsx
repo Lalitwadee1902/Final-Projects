@@ -104,7 +104,7 @@ const Community = ({ userRole }) => {
 
             <div className="space-y-6">
                 {posts.map(post => (
-                    <Card key={post.id} bordered={false} className="shadow-sm border border-slate-50 rounded-[2rem] overflow-hidden">
+                    <Card key={post.id} variant="borderless" className="shadow-sm border border-slate-50 rounded-[2rem] overflow-hidden">
                         <div className="flex items-start mb-4">
                             <Avatar
                                 size={48}

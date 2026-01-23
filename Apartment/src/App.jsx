@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Spin, message, List, Popover, Empty, Dropdown
+  Layout, Menu, Typography, Badge, Button, Space, Avatar, ConfigProvider, Spin, message, List, Popover, Empty, Dropdown, App as AntdApp
 } from 'antd';
 import {
   DashboardOutlined,
@@ -255,127 +255,129 @@ const App = () => {
 
   return (
     <ConfigProvider theme={{ token: { colorPrimary: '#dc2626', borderRadius: 16, fontFamily: "'Plus Jakarta Sans', 'Kanit', sans-serif" } }}>
-      <Layout className="min-h-screen bg-white">
-        <Sider theme="light" width={260} collapsed={collapsed} onCollapse={setCollapsed} className="border-r border-slate-50 fixed h-full z-50 shadow-none">
-          <div className="p-10 flex flex-col items-center">
-            <div className="w-12 h-12 bg-red-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-red-200 transform rotate-12 mb-4">
-              <ThunderboltOutlined className="text-white text-2xl" />
-            </div>
-            {!collapsed && <Text className="font-black text-xl tracking-tighter text-slate-800 uppercase">Apt<span className="text-red-600">Pure</span></Text>}
-          </div>
-
-          <Menu
-            mode="inline"
-            selectedKeys={[menu]}
-            onClick={({ key }) => setMenu(key)}
-            className="border-none px-6 mt-4 space-y-2"
-            items={role === 'admin' ? [
-              { key: 'dashboard', icon: <DashboardOutlined />, label: 'ภาพรวม' },
-              { key: 'rooms', icon: <HomeOutlined />, label: 'จัดการห้อง' },
-              { key: 'billing', icon: <FileTextOutlined />, label: 'ออกบิล' },
-              { key: 'maintenance', icon: <ToolOutlined />, label: 'แจ้งซ่อม' },
-              { key: 'community', icon: <MessageOutlined />, label: 'ข่าวสาร/ชุมชน' },
-              { key: 'phonebook', icon: <PhoneOutlined />, label: 'สมุดโทรศัพท์' },
-              { key: 'parcels', icon: <GiftOutlined />, label: 'จัดการพัสดุ' },
-              { key: 'market', icon: <ShopOutlined />, label: 'ตลาดซื้อขาย' }
-            ] : [
-              { key: 'tenant_home', icon: <HomeOutlined />, label: 'หน้าหลัก' },
-              { key: 'tenant_bill', icon: <CreditCardOutlined />, label: 'การชำระเงิน' },
-              { key: 'tenant_community', icon: <MessageOutlined />, label: 'ข่าวสาร/ชุมชน' },
-              { key: 'tenant_phonebook', icon: <PhoneOutlined />, label: 'สมุดโทรศัพท์' },
-              { key: 'market', icon: <ShopOutlined />, label: 'ตลาดซื้อขาย' }
-            ]}
-          />
-
-          <div className="absolute bottom-10 w-full px-8">
-            <Button
-              block
-              type="text"
-              danger
-              icon={<LogoutOutlined />}
-              onClick={handleLogout}
-              className="rounded-2xl h-12 font-bold bg-red-50 hover:bg-red-100 hover:text-red-700 transition-all flex items-center justify-center"
-            >
-              {!collapsed && "ออกจากระบบ"}
-            </Button>
-          </div>
-        </Sider>
-
-        <Layout className="bg-white ml-0 transition-all" style={{ marginLeft: collapsed ? 80 : 260 }}>
-          <Header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 px-10 flex justify-end items-center h-20 border-b border-slate-50">
-
-            <Space size="large">
-              <NotificationBell role={role} roomNumber={currentUserData?.roomNumber} userId={auth.currentUser?.uid} />
-              <Dropdown
-                menu={{
-                  items: [
-                    {
-                      key: 'profile',
-                      label: 'ข้อมูลส่วนตัว',
-                      icon: <UserOutlined />,
-                      onClick: () => setMenu('profile')
-                    },
-                    {
-                      type: 'divider'
-                    },
-                    {
-                      key: 'logout',
-                      label: 'ออกจากระบบ',
-                      icon: <LogoutOutlined />,
-                      danger: true,
-                      onClick: handleLogout
-                    }
-                  ]
-                }}
-                placement="bottomRight"
-                arrow={{ pointAtCenter: true }}
-              >
-                <Space className="cursor-pointer hover:bg-slate-50 p-2 rounded-full transition-all pr-4 pl-1">
-                  <Avatar size={40} className="border-2 border-white shadow-md bg-slate-200" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`} />
-                  <div className="flex flex-col text-right hidden lg:flex">
-                    <Text className="text-xs font-black text-slate-700">
-                      {currentUserData?.displayName || currentUserData?.name || (role === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน')}
-                    </Text>
-                    <Text className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">{role === 'admin' ? 'Admin' : 'Tenant'}</Text>
-                  </div>
-                </Space>
-              </Dropdown>
-            </Space>
-          </Header>
-
-          <Content className="p-4 bg-[#fafafa]/30">
-            <div className="max-w-6xl mx-auto space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <div className="flex justify-between items-end">
-                <div className="space-y-1">
-                  <Text className="text-red-600 font-black tracking-widest text-[10px] uppercase">ศูนย์ควบคุม</Text>
-                  <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : menu === 'billing' ? 'การจัดการบิล' : menu === 'maintenance' ? 'แจ้งซ่อม' : menu === 'community' ? 'ข่าวสาร/ชุมชน' : menu === 'phonebook' ? 'สมุดโทรศัพท์' : menu === 'parcels' ? 'จัดการพัสดุ' : menu === 'market' ? 'ตลาดลูกบ้าน' : menu === 'profile' ? 'ข้อมูลส่วนตัว' : 'หน้าหลักผู้เช่า'}</Title>
-                </div>
+      <AntdApp>
+        <Layout className="min-h-screen bg-white">
+          <Sider theme="light" width={260} collapsed={collapsed} onCollapse={setCollapsed} className="border-r border-slate-50 fixed h-full z-50 shadow-none">
+            <div className="p-10 flex flex-col items-center">
+              <div className="w-12 h-12 bg-red-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-red-200 transform rotate-12 mb-4">
+                <ThunderboltOutlined className="text-white text-2xl" />
               </div>
-
-              {menu === 'dashboard' && <AdminDashboard onNavigateToBilling={handleNavigateToBilling} />}
-              {menu === 'rooms' && <RoomList />}
-              {menu === 'billing' && <BillingList initialFilters={billingNavigationFilter} />}
-              {menu === 'maintenance' && <MaintenanceList />}
-              {menu === 'community' && <Community userRole={role} />}
-              {menu === 'phonebook' && <PhoneBook userRole={role} />}
-              {menu === 'parcels' && <ParcelList />}
-              {menu === 'market' && <Marketplace userRole={role} />}
-
-              {role === 'tenant' && menu === 'tenant_home' && <TenantPortal onNavigate={setMenu} />}
-
-              {/* {role === 'tenant' && menu === 'tenant_home' && <TenantPortal />} */}
-              {role === 'tenant' && menu === 'tenant_bill' && <TenantBilling roomNumber={currentUserData?.roomNumber} />}
-              {role === 'tenant' && menu === 'tenant_community' && <Community userRole={role} />}
-              {role === 'tenant' && menu === 'tenant_phonebook' && <PhoneBook userRole={role} />}
-              {menu === 'profile' && <Profile userData={currentUserData} />}
+              {!collapsed && <Text className="font-black text-xl tracking-tighter text-slate-800 uppercase">Apt<span className="text-red-600">Pure</span></Text>}
             </div>
-          </Content>
 
-          <Footer className="text-center py-10 text-slate-300 text-[10px] font-black uppercase tracking-[0.4em]">
-            Pure & Noble Apartment OS — Ver 2.0
-          </Footer>
+            <Menu
+              mode="inline"
+              selectedKeys={[menu]}
+              onClick={({ key }) => setMenu(key)}
+              className="border-none px-6 mt-4 space-y-2"
+              items={role === 'admin' ? [
+                { key: 'dashboard', icon: <DashboardOutlined />, label: 'ภาพรวม' },
+                { key: 'rooms', icon: <HomeOutlined />, label: 'จัดการห้อง' },
+                { key: 'billing', icon: <FileTextOutlined />, label: 'ออกบิล' },
+                { key: 'maintenance', icon: <ToolOutlined />, label: 'แจ้งซ่อม' },
+                { key: 'community', icon: <MessageOutlined />, label: 'ข่าวสาร/ชุมชน' },
+                { key: 'phonebook', icon: <PhoneOutlined />, label: 'สมุดโทรศัพท์' },
+                { key: 'parcels', icon: <GiftOutlined />, label: 'จัดการพัสดุ' },
+                { key: 'market', icon: <ShopOutlined />, label: 'ตลาดซื้อขาย' }
+              ] : [
+                { key: 'tenant_home', icon: <HomeOutlined />, label: 'หน้าหลัก' },
+                { key: 'tenant_bill', icon: <CreditCardOutlined />, label: 'การชำระเงิน' },
+                { key: 'tenant_community', icon: <MessageOutlined />, label: 'ข่าวสาร/ชุมชน' },
+                { key: 'tenant_phonebook', icon: <PhoneOutlined />, label: 'สมุดโทรศัพท์' },
+                { key: 'market', icon: <ShopOutlined />, label: 'ตลาดซื้อขาย' }
+              ]}
+            />
+
+            <div className="absolute bottom-10 w-full px-8">
+              <Button
+                block
+                type="text"
+                danger
+                icon={<LogoutOutlined />}
+                onClick={handleLogout}
+                className="rounded-2xl h-12 font-bold bg-red-50 hover:bg-red-100 hover:text-red-700 transition-all flex items-center justify-center"
+              >
+                {!collapsed && "ออกจากระบบ"}
+              </Button>
+            </div>
+          </Sider>
+
+          <Layout className="bg-white ml-0 transition-all" style={{ marginLeft: collapsed ? 80 : 260 }}>
+            <Header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 px-10 flex justify-end items-center h-20 border-b border-slate-50">
+
+              <Space size="large">
+                <NotificationBell role={role} roomNumber={currentUserData?.roomNumber} userId={auth.currentUser?.uid} />
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'profile',
+                        label: 'ข้อมูลส่วนตัว',
+                        icon: <UserOutlined />,
+                        onClick: () => setMenu('profile')
+                      },
+                      {
+                        type: 'divider'
+                      },
+                      {
+                        key: 'logout',
+                        label: 'ออกจากระบบ',
+                        icon: <LogoutOutlined />,
+                        danger: true,
+                        onClick: handleLogout
+                      }
+                    ]
+                  }}
+                  placement="bottomRight"
+                  arrow={{ pointAtCenter: true }}
+                >
+                  <Space className="cursor-pointer hover:bg-slate-50 p-2 rounded-full transition-all pr-4 pl-1">
+                    <Avatar size={40} className="border-2 border-white shadow-md bg-slate-200" src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${role}`} />
+                    <div className="flex flex-col text-right hidden lg:flex">
+                      <Text className="text-xs font-black text-slate-700">
+                        {currentUserData?.displayName || currentUserData?.name || (role === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งาน')}
+                      </Text>
+                      <Text className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">{role === 'admin' ? 'Admin' : 'Tenant'}</Text>
+                    </div>
+                  </Space>
+                </Dropdown>
+              </Space>
+            </Header>
+
+            <Content className="p-4 bg-[#fafafa]/30">
+              <div className="max-w-6xl mx-auto space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="flex justify-between items-end">
+                  <div className="space-y-1">
+                    <Text className="text-red-600 font-black tracking-widest text-[10px] uppercase">ศูนย์ควบคุม</Text>
+                    <Title level={2} className="m-0 font-black tracking-tighter text-4xl text-slate-900">{menu === 'dashboard' ? 'แดชบอร์ด' : menu === 'rooms' ? 'ห้องพัก' : menu === 'billing' ? 'การจัดการบิล' : menu === 'maintenance' ? 'แจ้งซ่อม' : menu === 'community' ? 'ข่าวสาร/ชุมชน' : menu === 'phonebook' ? 'สมุดโทรศัพท์' : menu === 'parcels' ? 'จัดการพัสดุ' : menu === 'market' ? 'ตลาดลูกบ้าน' : menu === 'profile' ? 'ข้อมูลส่วนตัว' : 'หน้าหลักผู้เช่า'}</Title>
+                  </div>
+                </div>
+
+                {menu === 'dashboard' && <AdminDashboard onNavigateToBilling={handleNavigateToBilling} />}
+                {menu === 'rooms' && <RoomList />}
+                {menu === 'billing' && <BillingList initialFilters={billingNavigationFilter} />}
+                {menu === 'maintenance' && <MaintenanceList />}
+                {menu === 'community' && <Community userRole={role} />}
+                {menu === 'phonebook' && <PhoneBook userRole={role} />}
+                {menu === 'parcels' && <ParcelList />}
+                {menu === 'market' && <Marketplace userRole={role} />}
+
+                {role === 'tenant' && menu === 'tenant_home' && <TenantPortal onNavigate={setMenu} />}
+
+                {/* {role === 'tenant' && menu === 'tenant_home' && <TenantPortal />} */}
+                {role === 'tenant' && menu === 'tenant_bill' && <TenantBilling roomNumber={currentUserData?.roomNumber} />}
+                {role === 'tenant' && menu === 'tenant_community' && <Community userRole={role} />}
+                {role === 'tenant' && menu === 'tenant_phonebook' && <PhoneBook userRole={role} />}
+                {menu === 'profile' && <Profile userData={currentUserData} />}
+              </div>
+            </Content>
+
+            <Footer className="text-center py-10 text-slate-300 text-[10px] font-black uppercase tracking-[0.4em]">
+              Pure & Noble Apartment OS — Ver 2.0
+            </Footer>
+          </Layout>
         </Layout>
-      </Layout>
+      </AntdApp>
     </ConfigProvider>
   );
 };

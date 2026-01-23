@@ -111,7 +111,7 @@ const MaintenanceList = () => {
                 </Space>
             </div>
 
-            <Card bordered={false} className="shadow-sm rounded-3xl overflow-hidden">
+            <Card variant="borderless" className="shadow-sm rounded-3xl overflow-hidden">
                 <Table
                     columns={columns}
                     dataSource={maintenanceRooms}
