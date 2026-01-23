@@ -1,4 +1,4 @@
-import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty, Image, Tag, Upload, message } from 'antd';
+import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty, Image, Tag, Upload, message, Modal } from 'antd';
 import {
     HomeOutlined, ThunderboltOutlined, LineChartOutlined, GiftOutlined, CheckCircleOutlined, UploadOutlined, ShopOutlined,
     ToolOutlined, FileTextOutlined, PhoneOutlined, RightOutlined, BellOutlined
@@ -26,101 +26,22 @@ const MOCK_EXPENSE_DATA = [
     { name: 'ม.ค.', rent: 5500, utilities: 560 },
 ];
 
-const TenantBillList = ({ roomNumber }) => {
-    const [bills, setBills] = useState([]);
-    const [uploading, setUploading] = useState(null);
 
-    useEffect(() => {
-        if (!roomNumber) return;
-        const q = query(
-            collection(db, "bills"),
-            where("room", "==", roomNumber),
-            where("status", "in", ["Pending", "Waiting for Review"])
-        );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(d => ({ key: d.id, ...d.data() }));
-            data.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
-            setBills(data);
-        });
-        return () => unsubscribe();
-    }, [roomNumber]);
-
-    const handleUpload = async (file, billId) => {
-        setUploading(billId);
-        try {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async () => {
-                const base64 = reader.result;
-                await updateDoc(doc(db, "bills", billId), {
-                    proofUrl: base64,
-                    status: 'Waiting for Review',
-                    uploadedAt: new Date()
-                });
-                message.success('อัปโหลดสลิปเรียบร้อย');
-                setUploading(null);
-            };
-        } catch (error) {
-            console.error(error);
-            message.error('อัปโหลดล้มเหลว');
-            setUploading(null);
-        }
-        return false; // Prevent auto upload
-    };
-
-    if (bills.length === 0) {
-        return (
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 flex items-center justify-center text-slate-300 gap-2">
-                <CheckCircleOutlined />
-                <Text className="text-slate-400">ขอบคุณครับ ไม่มียอดค้างชำระ</Text>
-            </div>
-        );
-    }
-
-    return (
-        <div className="grid grid-cols-1 gap-4">
-            {bills.map(b => (
-                <div key={b.key} className="bg-white p-6 rounded-3xl border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <Space size="large">
-                        <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500">
-                            {b.status === 'Waiting for Review' ? <CheckCircleOutlined /> : <ThunderboltOutlined />}
-                        </div>
-                        <div>
-                            <Text className="font-black text-slate-800 block text-base">{b.type} ({dayjs(b.dueDate).format('MMM')})</Text>
-                            <Space>
-                                <Tag color={b.status === 'Waiting for Review' ? 'blue' : 'orange'} className="rounded-full border-none px-2 text-[10px] font-bold">
-                                    {b.status === 'Waiting for Review' ? 'รอตรวจสอบ' : 'รอชำระ'}
-                                </Tag>
-                                <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Due: {b.dueDate}</Text>
-                            </Space>
-                        </div>
-                    </Space>
-
-                    <div className="flex items-center gap-4">
-                        <Text className="text-xl font-black text-slate-700">฿{b.amount.toLocaleString()}</Text>
-                        {b.status === 'Pending' && (
-                            <Upload
-                                showUploadList={false}
-                                beforeUpload={(file) => handleUpload(file, b.key)}
-                                accept="image/*"
-                            >
-                                <Button type="primary" danger loading={uploading === b.key} className="rounded-xl font-bold">
-                                    จ่าย/แนบสลิป
-                                </Button>
-                            </Upload>
-                        )}
-                        {b.status === 'Waiting for Review' && (
-                            <Button disabled className="rounded-xl bg-slate-100 border-none text-slate-400">
-                                ส่งแล้ว
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            ))}
+const QuickAccessCard = ({ icon, title, subtitle, color, bg, border, onClick }) => (
+    <div
+        className={`${bg} ${border} border rounded-[1.5rem] p-6 cursor-pointer hover:shadow-lg hover:scale-[1.02] transition-all duration-300 h-36 flex flex-col justify-between items-start relative overflow-hidden`}
+        onClick={onClick}
+    >
+        <div className={`text-3xl ${color}`}>
+            {icon}
         </div>
-    );
-};
+        <div>
+            <Text className={`font-black text-xl block ${color} mb-1`}>{title}</Text>
+            <Text className={`text-sm ${color} opacity-75 font-medium`}>{subtitle}</Text>
+        </div>
+    </div>
+);
 
 const TenantPortal = ({ onNavigate }) => {
     const [roomData, setRoomData] = useState(null);

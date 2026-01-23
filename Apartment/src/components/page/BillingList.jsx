@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseOutlined, FileSearchOutlined } from '@ant-design/icons';
-import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Image, Popover } from 'antd';
-import { PlusOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, CheckSquareOutlined, CloseOutlined } from '@ant-design/icons';
+import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Image, Popover, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseOutlined, FileSearchOutlined, FileTextOutlined, CheckSquareOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import dayjs from 'dayjs';
@@ -192,7 +190,6 @@ const BillingList = () => {
             dataIndex: 'room',
             key: 'room',
             render: (t) => <Text className="font-black text-slate-800 text-lg">{t}</Text>
-            render: (t) => <Text className="font-black text-slate-800">{t}</Text>
         },
         {
             title: 'รายการ',
@@ -252,7 +249,6 @@ const BillingList = () => {
             )
         },
         {
-            title: 'การกระทำ',
             title: 'วันที่จ่าย',
             key: 'paidAt',
             render: (_, record) => {
@@ -377,11 +373,10 @@ const BillingList = () => {
                 footer={null}
                 destroyOnClose
             >
-                <Form layout="vertical" onFinish={handleCreateBill} form={form}>
-                    <p className="text-xs text-slate-400 mb-4 bg-yellow-50 p-2 rounded border border-yellow-100 text-orange-600">
-                        * บิลจะถูกรวมยอดอัตโนมัติตาม "ห้อง" และ "เดือนที่กำหนดชำระ" ในหน้าลาร์บิล
-                    </p>
                 <Form layout="vertical" onFinish={handleCreateBill} form={form} initialValues={{ rent: 4500, water: 100, electricity: 500 }}>
+                    <p className="text-xs text-slate-400 mb-4 bg-yellow-50 p-2 rounded border border-yellow-100 text-orange-600">
+                        * บิลจะถูกรวมยอดอัตโนมัติตาม "ห้อง" และ "เดือนที่กำหนดชำระ" ในหน้ารวมบิล
+                    </p>
                     <Form.Item name="room" label="ห้อง" rules={[{ required: true, message: 'กรุณาเลือกห้อง' }]}>
                         <Select placeholder="เลือกห้อง">
                             {rooms.map(r => (

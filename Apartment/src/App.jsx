@@ -139,7 +139,9 @@ const NotificationBell = ({ role, roomNumber, userId }) => {
       trigger="click"
       placement="bottomRight"
       arrow={false}
-      overlayInnerStyle={{ padding: '12px', borderRadius: '16px' }}
+      // overlayInnerStyle={{ padding: '12px', borderRadius: '16px' }} 
+      // Deprecated, replaced by:
+      styles={{ body: { padding: '12px', borderRadius: '16px' } }}
       onOpenChange={(visible) => {
         // Auto mark as read when closing the popover
         if (!visible) {
@@ -262,28 +264,28 @@ const App = () => {
             {!collapsed && <Text className="font-black text-xl tracking-tighter text-slate-800 uppercase">Apt<span className="text-red-600">Pure</span></Text>}
           </div>
 
-          <Menu mode="inline" selectedKeys={[menu]} onClick={({ key }) => setMenu(key)} className="border-none px-6 mt-4 space-y-2">
-            {role === 'admin' ? (
-              <>
-                <Menu.Item key="dashboard" icon={<DashboardOutlined />}>ภาพรวม</Menu.Item>
-                <Menu.Item key="rooms" icon={<HomeOutlined />}>จัดการห้อง</Menu.Item>
-                <Menu.Item key="billing" icon={<FileTextOutlined />}>ออกบิล</Menu.Item>
-                <Menu.Item key="maintenance" icon={<ToolOutlined />}>แจ้งซ่อม</Menu.Item>
-                <Menu.Item key="community" icon={<MessageOutlined />}>ข่าวสาร/ชุมชน</Menu.Item>
-                <Menu.Item key="phonebook" icon={<PhoneOutlined />}>สมุดโทรศัพท์</Menu.Item>
-                <Menu.Item key="parcels" icon={<GiftOutlined />}>จัดการพัสดุ</Menu.Item>
-                <Menu.Item key="market" icon={<ShopOutlined />}>ตลาดซื้อขาย</Menu.Item>
-              </>
-            ) : (
-              <>
-                <Menu.Item key="tenant_home" icon={<HomeOutlined />}>หน้าหลัก</Menu.Item>
-                <Menu.Item key="tenant_bill" icon={<CreditCardOutlined />}>การชำระเงิน</Menu.Item>
-                <Menu.Item key="tenant_community" icon={<MessageOutlined />}>ข่าวสาร/ชุมชน</Menu.Item>
-                <Menu.Item key="tenant_phonebook" icon={<PhoneOutlined />}>สมุดโทรศัพท์</Menu.Item>
-                <Menu.Item key="market" icon={<ShopOutlined />}>ตลาดซื้อขาย</Menu.Item>
-              </>
-            )}
-          </Menu>
+          <Menu
+            mode="inline"
+            selectedKeys={[menu]}
+            onClick={({ key }) => setMenu(key)}
+            className="border-none px-6 mt-4 space-y-2"
+            items={role === 'admin' ? [
+              { key: 'dashboard', icon: <DashboardOutlined />, label: 'ภาพรวม' },
+              { key: 'rooms', icon: <HomeOutlined />, label: 'จัดการห้อง' },
+              { key: 'billing', icon: <FileTextOutlined />, label: 'ออกบิล' },
+              { key: 'maintenance', icon: <ToolOutlined />, label: 'แจ้งซ่อม' },
+              { key: 'community', icon: <MessageOutlined />, label: 'ข่าวสาร/ชุมชน' },
+              { key: 'phonebook', icon: <PhoneOutlined />, label: 'สมุดโทรศัพท์' },
+              { key: 'parcels', icon: <GiftOutlined />, label: 'จัดการพัสดุ' },
+              { key: 'market', icon: <ShopOutlined />, label: 'ตลาดซื้อขาย' }
+            ] : [
+              { key: 'tenant_home', icon: <HomeOutlined />, label: 'หน้าหลัก' },
+              { key: 'tenant_bill', icon: <CreditCardOutlined />, label: 'การชำระเงิน' },
+              { key: 'tenant_community', icon: <MessageOutlined />, label: 'ข่าวสาร/ชุมชน' },
+              { key: 'tenant_phonebook', icon: <PhoneOutlined />, label: 'สมุดโทรศัพท์' },
+              { key: 'market', icon: <ShopOutlined />, label: 'ตลาดซื้อขาย' }
+            ]}
+          />
 
           <div className="absolute bottom-10 w-full px-8">
             <Button
