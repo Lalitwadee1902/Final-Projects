@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Typography, Modal, Form, Input, Select, InputNumber, message, Popconfirm, Space } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, CheckSquareOutlined, CloseOutlined } from '@ant-design/icons';
-import { collection, onSnapshot, doc, deleteDoc, setDoc, updateDoc, addDoc } from 'firebase/firestore';
+import { Card, Table, Tag, Button, Typography, Modal, Form, Input, Select, InputNumber, message, Popconfirm, Space, Tabs, List, Descriptions, Avatar, Badge, Empty, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, CheckSquareOutlined, CloseOutlined, UserOutlined, FileTextOutlined, BellOutlined, DisconnectOutlined, SearchOutlined, SafetyCertificateOutlined, HistoryOutlined } from '@ant-design/icons';
+import { collection, onSnapshot, doc, deleteDoc, setDoc, updateDoc, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../firebase';
+import dayjs from 'dayjs';
+import 'dayjs/locale/th';
+
+dayjs.locale('th');
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -13,6 +17,90 @@ const RoomList = () => {
     const [editingRoom, setEditingRoom] = useState(null);
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
+
+    // Detail Modal State
+    const [detailVisible, setDetailVisible] = useState(false);
+    const [detailRoom, setDetailRoom] = useState(null);
+    const [tenantInfo, setTenantInfo] = useState(null);
+    const [roomBills, setRoomBills] = useState([]);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+
+    const fetchRoomDetails = async (room) => {
+        setLoadingDetails(true);
+        setDetailRoom(room);
+        setDetailVisible(true);
+        setTenantInfo(null);
+        setRoomBills([]);
+
+        try {
+            // 1. Fetch Tenant Info
+            if (room.tenant && room.tenant !== '-') {
+                const qUser = query(collection(db, "users"), where("roomNumber", "==", room.id));
+                const userSnapshot = await getDocs(qUser);
+                if (!userSnapshot.empty) {
+                    setTenantInfo(userSnapshot.docs[0].data());
+                }
+            }
+
+            // 2. Fetch Bills
+            const qBills = query(collection(db, "bills"), where("room", "==", room.id));
+            const billSnapshot = await getDocs(qBills);
+            const bills = billSnapshot.docs.map(doc => ({ key: doc.id, ...doc.data() }));
+            bills.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+            setRoomBills(bills);
+
+        } catch (error) {
+            console.error("Error fetching details:", error);
+            message.error("ดึงข้อมูลไม่สำเร็จ");
+        } finally {
+            setLoadingDetails(false);
+        }
+    };
+
+    const handleRemoveTenant = async () => {
+        if (!detailRoom) return;
+        try {
+            // 1. Update Room
+            await updateDoc(doc(db, "rooms", detailRoom.id), {
+                status: 'Vacant',
+                tenant: '-'
+            });
+
+            // 2. Update User (if found)
+            if (tenantInfo) {
+                // Find user doc id (we need to query again or store ID, assuming we query)
+                const qUser = query(collection(db, "users"), where("roomNumber", "==", detailRoom.id));
+                const userSnapshot = await getDocs(qUser);
+                if (!userSnapshot.empty) {
+                    const userDocId = userSnapshot.docs[0].id;
+                    await updateDoc(doc(db, "users", userDocId), {
+                        roomNumber: null
+                    });
+                }
+            }
+
+            message.success(`เอาผู้เช่าออกจากห้อง ${detailRoom.id} เรียบร้อย`);
+            setDetailVisible(false);
+        } catch (error) {
+            console.error(error);
+            message.error("เกิดข้อผิดพลาด");
+        }
+    };
+
+    const handleSendReminder = async (bill) => {
+        try {
+            await addDoc(collection(db, "notifications"), {
+                type: 'payment_reminder',
+                title: `แจ้งเตือนชำระเงิน ห้อง ${detailRoom.id}`,
+                message: `กรุณาชำระบิลรอบเดือน ${dayjs(bill.dueDate).format('MMMM')} จำนวน ฿${bill.amount.toLocaleString()}`,
+                read: false,
+                createdAt: new Date()
+            });
+            message.success("ส่งแจ้งเตือนแล้ว");
+        } catch (error) {
+            message.error("ส่งไม่สำเร็จ");
+        }
+    };
 
     // Filters
     const [searchText, setSearchText] = useState('');
@@ -159,6 +247,9 @@ const RoomList = () => {
             key: 'action',
             render: (_, record) => (
                 <Space>
+                    <Tooltip title="ดูรายละเอียด">
+                        <Button type="primary" shape="circle" icon={<SearchOutlined />} onClick={() => fetchRoomDetails(record)} className="bg-indigo-500 border-indigo-500" />
+                    </Tooltip>
                     <Button type="text" icon={<EditOutlined />} className="text-slate-400" onClick={() => handleEdit(record)} />
                     <Popconfirm title="แน่ใจนะว่าจะลบห้องนี้?" onConfirm={() => handleDelete(record.id)} okText="ลบ" cancelText="ยกเลิก">
                         <Button type="text" danger icon={<DeleteOutlined />} />
@@ -267,6 +358,107 @@ const RoomList = () => {
                     </Form.Item>
                     <Button type="primary" htmlType="submit" loading={loading} block danger className="h-10 font-bold">บันทึกข้อมูล</Button>
                 </Form>
+            </Modal>
+
+            <Modal
+                title={
+                    <div className="flex items-center gap-3">
+                        <Avatar shape="square" size="large" className="bg-gradient-to-br from-indigo-500 to-purple-600" icon={<UserOutlined />} />
+                        <div className="flex flex-col">
+                            <Text className="font-black text-lg">รายละเอียดห้อง {detailRoom?.id}</Text>
+                            <Text className="text-xs text-slate-400 font-normal">{detailRoom?.type} • {detailRoom?.status}</Text>
+                        </div>
+                    </div>
+                }
+                open={detailVisible}
+                onCancel={() => setDetailVisible(false)}
+                footer={null}
+                width={700}
+                centered
+            >
+                {detailRoom && (
+                    <Tabs defaultActiveKey="1" items={[
+                        {
+                            key: '1',
+                            label: <span><UserOutlined /> ข้อมูลผู้เช่า</span>,
+                            children: (
+                                <div className="space-y-6 pt-4">
+                                    {detailRoom.status === 'Occupied' ? (
+                                        <>
+                                            <Card className="bg-slate-50 border-slate-100 rounded-2xl">
+                                                <Descriptions title="ข้อมูลสัญญา" column={1}>
+                                                    <Descriptions.Item label="ชื่อผู้เช่า">{detailRoom.tenant}</Descriptions.Item>
+                                                    <Descriptions.Item label="เบอร์โทร">{tenantInfo?.phoneNumber || '-'}</Descriptions.Item>
+                                                    <Descriptions.Item label="Line ID">{tenantInfo?.lineId || '-'}</Descriptions.Item>
+                                                    <Descriptions.Item label="เริ่มสัญญา">{tenantInfo?.moveInDate || 'ไม่ระบุ'}</Descriptions.Item>
+                                                </Descriptions>
+                                            </Card>
+                                            <div className="flex justify-end">
+                                                <Popconfirm
+                                                    title="ต้องการลบผู้เช่าคนนี้?"
+                                                    description="การกระทำนี้จะทำให้ห้องว่างทันที"
+                                                    onConfirm={handleRemoveTenant}
+                                                    okText="ยืนยัน"
+                                                    cancelText="ยกเลิก"
+                                                >
+                                                    <Button danger type="dashed" icon={<DisconnectOutlined />}>
+                                                        ยกเลิกสัญญา / ย้ายออก
+                                                    </Button>
+                                                </Popconfirm>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <Empty description="ห้องว่าง (Vacant)" />
+                                    )}
+                                </div>
+                            )
+                        },
+                        {
+                            key: '2',
+                            label: <span><HistoryOutlined /> ประวัติการชำระเงิน</span>,
+                            children: (
+                                <List
+                                    className="pt-4"
+                                    itemLayout="horizontal"
+                                    dataSource={roomBills}
+                                    renderItem={item => (
+                                        <List.Item
+                                            className="border-b border-slate-50 last:border-none hover:bg-slate-50 px-4 rounded-xl transition-colors"
+                                            actions={[
+                                                item.status === 'Pending' && (
+                                                    <Button type="link" size="small" icon={<BellOutlined />} onClick={() => handleSendReminder(item)}>
+                                                        ทวงถาม
+                                                    </Button>
+                                                )
+                                            ]}
+                                        >
+                                            <List.Item.Meta
+                                                avatar={
+                                                    <Avatar
+                                                        icon={item.status === 'Paid' ? <CheckSquareOutlined /> : <FileTextOutlined />}
+                                                        className={item.status === 'Paid' ? "bg-green-100 text-green-600" : "bg-orange-100 text-orange-600"}
+                                                    />
+                                                }
+                                                title={<Text className="font-bold">{item.type} - {dayjs(item.dueDate).format('MMM YY')}</Text>}
+                                                description={
+                                                    <Space>
+                                                        <Tag color={item.status === 'Paid' ? 'green' : 'orange'} className="border-none rounded-sm text-[10px] font-bold">
+                                                            {item.status}
+                                                        </Tag>
+                                                        <Text className="text-xs text-slate-400">ครบกำหนด: {dayjs(item.dueDate).format('DD/MM/YYYY')}</Text>
+                                                    </Space>
+                                                }
+                                            />
+                                            <div className="text-right">
+                                                <Text className="font-black block">฿{item.amount.toLocaleString()}</Text>
+                                            </div>
+                                        </List.Item>
+                                    )}
+                                />
+                            )
+                        }
+                    ]} />
+                )}
             </Modal>
         </>
     );
