@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Typography, Form, Input, Button, Checkbox, message } from 'antd';
-import { LockOutlined, ThunderboltOutlined, HomeOutlined, MailOutlined } from '@ant-design/icons';
+import { LockOutlined, ThunderboltOutlined, HomeOutlined, MailOutlined, UserOutlined, PhoneOutlined } from '@ant-design/icons';
 import bcrypt from 'bcryptjs';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../../firebase';
 
 const { Title, Text } = Typography;
@@ -28,6 +28,22 @@ const Login = ({ onLogin }) => {
                     return;
                 }
 
+                // 0. Pre-check: Validate Room Validity & Vacancy
+                const roomRef = doc(db, "rooms", values.room_id);
+                const roomSnap = await getDoc(roomRef);
+
+                if (!roomSnap.exists()) {
+                    message.error('ไม่พบเลขห้องนี้ในระบบ');
+                    setLoading(false);
+                    return;
+                }
+
+                if (roomSnap.data().status !== 'Vacant') {
+                    message.error('ห้องนี้มีผู้เช่าแล้ว ไม่สามารถลงทะเบียนได้');
+                    setLoading(false);
+                    return;
+                }
+
                 // 1. Create User in Auth
                 const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
                 const user = userCredential.user;
@@ -38,20 +54,24 @@ const Login = ({ onLogin }) => {
 
                 const userData = {
                     email: user.email,
+                    displayName: values.name, // Save Real Name
+                    phoneNumber: values.phone, // Save Phone
+                    roomNumber: values.room_id,
                     role: role,
-                    password: hashedPassword, // Store hashed password
+                    password: hashedPassword,
                     createdAt: new Date()
                 };
 
-                // Add Room ID for Tenant
-                if (values.room_id) {
-                    userData.roomNumber = values.room_id;
-                }
-
-                // 3. Save Role to Firestore
+                // 3. Save User to Firestore
                 await setDoc(doc(db, "users", user.uid), userData);
 
-                message.success('สมัครสมาชิกสำเร็จ! กำลังเข้าสู่ระบบ...');
+                // 4. Update Room Status -> Occupied
+                await updateDoc(roomRef, {
+                    status: 'Occupied',
+                    tenant: values.name // Link Name to Room for display
+                });
+
+                message.success('สมัครสมาชิกและเช็คอินเข้าห้องสำเร็จ!');
             } else {
                 // --- LOGIN ---
                 const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
@@ -128,7 +148,7 @@ const Login = ({ onLogin }) => {
             <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-red-100 rounded-full blur-[100px] opacity-50 pointer-events-none" />
             <div className="absolute bottom-[-10%] left-[-5%] w-[600px] h-[600px] bg-blue-50 rounded-full blur-[120px] opacity-60 pointer-events-none" />
 
-            <Card bordered={false} className="w-full max-w-md shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] rounded-[2rem] overflow-hidden relative z-10">
+            <Card variant="borderless" className="w-full max-w-md shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] rounded-[2rem] overflow-hidden relative z-10">
                 <div className="text-center mb-6 pt-4">
                     <div className="w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center shadow-xl shadow-red-200 transform rotate-12 mx-auto mb-6">
                         <ThunderboltOutlined className="text-white text-3xl" />
@@ -149,6 +169,17 @@ const Login = ({ onLogin }) => {
                         initialValues={{ remember: true }}
                         requiredMark={false}
                     >
+                        {isRegistering && (
+                            <>
+                                <Form.Item name="name" rules={[{ required: true, message: 'กรุณากรอกชื่อ-นามสกุล' }]}>
+                                    <Input prefix={<UserOutlined className="text-slate-400" />} placeholder="ชื่อ-นามสกุล (Name-Surname)" className="rounded-xl bg-slate-50 border-slate-100 placeholder:text-slate-400 text-sm font-medium h-12" />
+                                </Form.Item>
+                                <Form.Item name="phone" rules={[{ required: true, message: 'กรุณากรอกเบอร์โทร' }]}>
+                                    <Input prefix={<PhoneOutlined className="text-slate-400" />} placeholder="เบอร์โทรศัพท์ (Phone)" className="rounded-xl bg-slate-50 border-slate-100 placeholder:text-slate-400 text-sm font-medium h-12" />
+                                </Form.Item>
+                            </>
+                        )}
+
                         <Form.Item
                             name="email"
                             rules={[{ required: true, message: 'กรุณากรอกอีเมล' }, { type: 'email', message: 'รูปแบบอีเมลไม่ถูกต้อง' }]}

@@ -263,8 +263,8 @@ const AdminDashboard = ({ onNavigateToBilling }) => {
 
             <Row gutter={[20, 20]}>
                 <Col xs={24} lg={16}>
-                    <Card bordered={false} title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">กระแสรายได้ (6 เดือนล่าสุด) - คลิกเพื่อดูรายละเอียด</Text>} className="shadow-sm rounded-2xl">
-                        <div className="h-[300px] w-full mt-4">
+                    <Card variant="borderless" title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">กระแสรายได้ (6 เดือนล่าสุด) - คลิกเพื่อดูรายละเอียด</Text>} className="shadow-sm rounded-2xl">
+                        <div className="h-[300px] w-full mt-4" style={{ minWidth: 0 }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={monthlyData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -293,8 +293,8 @@ const AdminDashboard = ({ onNavigateToBilling }) => {
                     </Card>
                 </Col>
                 <Col xs={24} lg={8}>
-                    <Card bordered={false} title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">สัดส่วนห้องพัก</Text>} className="shadow-sm rounded-2xl">
-                        <div className="h-[240px] w-full">
+                    <Card variant="borderless" title={<Text className="font-black uppercase tracking-tight text-xs text-slate-500">สัดส่วนห้องพัก</Text>} className="shadow-sm rounded-2xl">
+                        <div className="h-[240px] w-full" style={{ minWidth: 0 }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie data={roomStatusData} innerRadius={60} outerRadius={80} paddingAngle={8} dataKey="value" stroke="none">

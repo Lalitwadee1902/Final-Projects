@@ -82,9 +82,17 @@ const TenantBilling = ({ roomNumber }) => {
 
         setUploading(true);
         try {
-            // Mock Upload - In real app, upload to Storage and get URL
-            // const slipUrl = await uploadFile(fileList[0]); 
-            const slipUrl = "https://placehold.co/400x600?text=Slip+Image";
+            // Convert to Base64 for demo/portability (instead of Storage)
+            const getBase64 = (file) =>
+                new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = (error) => reject(error);
+                });
+
+            // Use the actual file object for conversion
+            const slipUrl = await getBase64(fileList[0].originFileObj || fileList[0]);
 
             // Calculate Total
             const selectedBillsData = bills.filter(b => selectedBillIds.includes(b.id));
@@ -94,7 +102,7 @@ const TenantBilling = ({ roomNumber }) => {
             const updatePromises = selectedBillIds.map(id =>
                 updateDoc(doc(db, "bills", id), {
                     status: 'Pending Review',
-                    paymentSlip: slipUrl,
+                    paymentSlip: slipUrl, // Save Base64 string
                     paidAt: new Date()
                 })
             );
@@ -207,7 +215,7 @@ const TenantBilling = ({ roomNumber }) => {
                         <Card
                             key={month}
                             className={`rounded-3xl border-none shadow-sm overflow-hidden transition-all duration-300 ${isAllPaid ? 'opacity-75' : ''}`}
-                            bodyStyle={{ padding: isExpanded ? '24px' : '0px', display: isExpanded ? 'block' : 'none' }}
+                            styles={{ body: { padding: isExpanded ? '24px' : '0px', display: isExpanded ? 'block' : 'none' } }}
                             title={
                                 <div className="flex justify-between items-center py-4">
                                     <div className="flex items-center gap-4">
@@ -332,14 +340,19 @@ const TenantBilling = ({ roomNumber }) => {
                             newFileList.splice(index, 1);
                             setFileList(newFileList);
                         }}
-                        beforeUpload={(file) => {
-                            setFileList([...fileList, file]);
-                            return false;
-                        }}
-                        fileList={fileList}
                         maxCount={1}
                         listType="picture-card"
                         className="w-full"
+                        accept="image/*"
+                        beforeUpload={(file) => {
+                            const isImage = file.type.startsWith('image/');
+                            if (!isImage) {
+                                message.error('สามารถอัปโหลดได้เฉพาะไฟล์รูปภาพเท่านั้น');
+                                return Upload.LIST_IGNORE;
+                            }
+                            setFileList([...fileList, file]);
+                            return false;
+                        }}
                     >
                         {fileList.length < 1 && (
                             <div className="flex flex-col items-center justify-center text-slate-400">

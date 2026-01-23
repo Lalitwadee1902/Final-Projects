@@ -176,13 +176,28 @@ const RoomList = () => {
     const handleSaveRoom = async (values) => {
         setLoading(true);
         try {
+            const updates = {
+                type: values.type,
+                price: values.price,
+                status: values.status,
+            };
+
+            // Safety: If Admin manually sets to Vacant, MUST clear tenant linkage
+            if (values.status === 'Vacant') {
+                updates.tenant = '-';
+
+                // Unlink any user currently in this room
+                const qUser = query(collection(db, "users"), where("roomNumber", "==", values.id));
+                const userSnapshot = await getDocs(qUser);
+                if (!userSnapshot.empty) {
+                    const userDocId = userSnapshot.docs[0].id;
+                    await updateDoc(doc(db, "users", userDocId), { roomNumber: null });
+                }
+            }
+
             if (editingRoom) {
                 // Update existing room
-                await updateDoc(doc(db, "rooms", editingRoom.id), {
-                    type: values.type,
-                    price: values.price,
-                    status: values.status,
-                });
+                await updateDoc(doc(db, "rooms", editingRoom.id), updates);
 
                 // Trigger Notification if Maintenance
                 if (values.status === 'Maintenance' && editingRoom.status !== 'Maintenance') {
@@ -194,15 +209,12 @@ const RoomList = () => {
                         createdAt: new Date()
                     });
                 }
-
-                message.success('แก้ไขข้อมูลสำเร็จ');
+                message.success('แก้ไขข้อมูลสำเร็จ (พร้อมเคลียร์ผู้เช่าเก่าถ้ามี)');
             } else {
                 // Create new room
                 await setDoc(doc(db, "rooms", values.id), {
                     id: values.id,
-                    type: values.type,
-                    price: values.price,
-                    status: values.status || 'Vacant',
+                    ...updates,
                     tenant: '-',
                     createdAt: new Date()
                 });
@@ -300,7 +312,7 @@ const RoomList = () => {
 
     return (
         <>
-            <Card bordered={false} title={<Text className="font-black text-lg">การจัดการห้องพัก</Text>} extra={
+            <Card variant="borderless" title={<Text className="font-black text-lg">การจัดการห้องพัก</Text>} extra={
                 <Space>
                     <Button
                         onClick={toggleSelectionMode}

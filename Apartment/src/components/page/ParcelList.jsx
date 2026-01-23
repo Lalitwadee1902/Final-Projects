@@ -203,7 +203,7 @@ const ParcelList = () => {
     return (
         <>
             <Card
-                bordered={false}
+                variant="borderless"
                 className="shadow-sm rounded-2xl"
                 title={
                     <div className="flex flex-col">
