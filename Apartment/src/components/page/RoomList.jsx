@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Typography, Modal, Form, Input, Select, InputNumber, message, Popconfirm, Space, Tabs, List, Descriptions, Avatar, Badge, Empty, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, CheckSquareOutlined, CloseOutlined, UserOutlined, FileTextOutlined, BellOutlined, DisconnectOutlined, SearchOutlined, SafetyCertificateOutlined, HistoryOutlined } from '@ant-design/icons';
+import { Card, Table, Tag, Button, Typography, Modal, Form, Input, Select, InputNumber, message, Popconfirm, Space, Tabs, List, Descriptions, Avatar, Badge, Empty, Tooltip, Upload } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, CheckSquareOutlined, CloseOutlined, UserOutlined, FileTextOutlined, BellOutlined, DisconnectOutlined, SearchOutlined, SafetyCertificateOutlined, HistoryOutlined, UploadOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, doc, deleteDoc, setDoc, updateDoc, addDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import dayjs from 'dayjs';
@@ -24,6 +24,10 @@ const RoomList = () => {
     const [tenantInfo, setTenantInfo] = useState(null);
     const [roomBills, setRoomBills] = useState([]);
     const [loadingDetails, setLoadingDetails] = useState(false);
+
+    // Contract Preview
+    const [contractVisible, setContractVisible] = useState(false);
+    const [previewContract, setPreviewContract] = useState(null);
 
     const fetchRoomDetails = async (room) => {
         setLoadingDetails(true);
@@ -99,6 +103,41 @@ const RoomList = () => {
             message.success("ส่งแจ้งเตือนแล้ว");
         } catch (error) {
             message.error("ส่งไม่สำเร็จ");
+        }
+    };
+
+    const handleUploadContract = async (file) => {
+        if (!detailRoom) return;
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const base64 = reader.result;
+                await updateDoc(doc(db, "rooms", detailRoom.id), {
+                    contractUrl: base64,
+                    contractUpdatedAt: new Date()
+                });
+                setDetailRoom(prev => ({ ...prev, contractUrl: base64 }));
+                message.success('อัปโหลดสัญญาเรียบร้อย');
+            };
+        } catch (error) {
+            console.error(error);
+            message.error('อัปโหลดล้มเหลว');
+        }
+        return false;
+    };
+
+    const handleDeleteContract = async () => {
+        if (!detailRoom) return;
+        try {
+            await updateDoc(doc(db, "rooms", detailRoom.id), {
+                contractUrl: null,
+                contractUpdatedAt: null
+            });
+            setDetailRoom(prev => ({ ...prev, contractUrl: null }));
+            message.success('ลบสัญญาเรียบร้อย');
+        } catch (error) {
+            message.error('ลบล้มเหลว');
         }
     };
 
@@ -456,8 +495,69 @@ const RoomList = () => {
                                     )}
                                 />
                             )
+                        },
+                        {
+                            key: '3',
+                            label: <span><FilePdfOutlined /> เอกสารสัญญา</span>,
+                            children: (
+                                <div className="space-y-6 pt-4">
+                                    {detailRoom.contractUrl ? (
+                                        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center gap-4">
+                                            <FilePdfOutlined className="text-6xl text-red-400" />
+                                            <div className="text-center">
+                                                <Text className="block font-bold text-lg">มีเอกสารสัญญาแล้ว</Text>
+                                                <Text className="text-slate-400 text-xs">อัปโหลดเมื่อ: {detailRoom.contractUpdatedAt ? dayjs(detailRoom.contractUpdatedAt.toDate()).format('DD/MM/YYYY HH:mm') : 'ไม่ระบุ'}</Text>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button type="primary" onClick={() => {
+                                                    setPreviewContract(detailRoom.contractUrl);
+                                                    setContractVisible(true);
+                                                }}>
+                                                    เปิดดูสัญญา
+                                                </Button>
+                                                <Popconfirm title="ลบสัญญา?" onConfirm={handleDeleteContract}>
+                                                    <Button danger>ลบ</Button>
+                                                </Popconfirm>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-4 text-center">
+                                            <FilePdfOutlined className="text-4xl text-slate-300" />
+                                            <div>
+                                                <Text className="block font-bold text-slate-600">ยังไม่มีเอกสารสัญญา</Text>
+                                                <Text className="text-slate-400 text-xs">อัปโหลดไฟล์ PDF หรือรูปภาพสัญญาเช่าที่นี่</Text>
+                                            </div>
+                                            <Upload
+                                                showUploadList={false}
+                                                beforeUpload={handleUploadContract}
+                                                accept=".pdf,image/*"
+                                            >
+                                                <Button icon={<UploadOutlined />}>อัปโหลดสัญญา</Button>
+                                            </Upload>
+                                        </div>
+                                    )}
+                                </div>
+                            )
                         }
                     ]} />
+                )}
+            </Modal>
+
+            <Modal
+                title="เอกสารสัญญา"
+                open={contractVisible}
+                onCancel={() => setContractVisible(false)}
+                footer={null}
+                width={800}
+                centered
+                className="top-5"
+            >
+                {previewContract && (
+                    previewContract.startsWith('data:image') ? (
+                        <img src={previewContract} alt="Contract" className="w-full rounded-lg" />
+                    ) : (
+                        <iframe src={previewContract} className="w-full h-[70vh] rounded-lg border-none" title="Contract PDF" />
+                    )
                 )}
             </Modal>
         </>
