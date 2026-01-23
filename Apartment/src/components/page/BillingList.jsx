@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm } from 'antd';
+import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Image } from 'antd';
 import { PlusOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, CheckSquareOutlined, CloseOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../../firebase';
@@ -168,6 +168,15 @@ const BillingList = ({ initialFilters }) => {
         onChange: onSelectChange,
     };
 
+    // Image Preview
+    const [previewImage, setPreviewImage] = useState('');
+    const [isPreviewVisible, setIsPreviewVisible] = useState(false);
+
+    const handlePreview = (url) => {
+        setPreviewImage(url);
+        setIsPreviewVisible(true);
+    };
+
     const columns = [
         {
             title: 'ห้อง',
@@ -188,6 +197,20 @@ const BillingList = ({ initialFilters }) => {
             render: (v) => <Text className="font-bold text-slate-900">฿{v.toLocaleString()}</Text>
         },
         {
+            title: 'หลักฐาน',
+            key: 'proof',
+            render: (_, record) => record.proofUrl ? (
+                <Button
+                    type="link"
+                    icon={<FileTextOutlined />}
+                    onClick={() => handlePreview(record.proofUrl)}
+                    className="text-blue-500"
+                >
+                    ดูสลิป
+                </Button>
+            ) : <Text className="text-slate-300">-</Text>
+        },
+        {
             title: 'กำหนดชำระ',
             dataIndex: 'dueDate',
             key: 'dueDate',
@@ -199,10 +222,10 @@ const BillingList = ({ initialFilters }) => {
             key: 'status',
             render: (s) => (
                 <Tag className="rounded-full border-none px-3 text-[10px] font-black"
-                    color={s === 'Paid' ? '#f0fdf4' : s === 'Pending' ? '#fefce8' : '#fee2e2'}
+                    color={s === 'Paid' ? '#f0fdf4' : s === 'Pending' ? '#fefce8' : s === 'Waiting for Review' ? '#eff6ff' : '#fee2e2'}
                 >
-                    <span style={{ color: s === 'Paid' ? '#16a34a' : s === 'Pending' ? '#ca8a04' : '#dc2626' }}>
-                        {s.toUpperCase()}
+                    <span style={{ color: s === 'Paid' ? '#16a34a' : s === 'Pending' ? '#ca8a04' : s === 'Waiting for Review' ? '#2563eb' : '#dc2626' }}>
+                        {s === 'Waiting for Review' ? 'รอตรวจสอบ' : s.toUpperCase()}
                     </span>
                 </Tag>
             )
@@ -341,6 +364,15 @@ const BillingList = ({ initialFilters }) => {
 
                     <Button type="primary" htmlType="submit" loading={loading} block danger className="h-10 font-bold">สร้างบิล</Button>
                 </Form>
+            </Modal>
+
+            <Modal
+                open={isPreviewVisible}
+                footer={null}
+                onCancel={() => setIsPreviewVisible(false)}
+                centered
+            >
+                <img alt="proof" style={{ width: '100%' }} src={previewImage} />
             </Modal>
         </>
     );

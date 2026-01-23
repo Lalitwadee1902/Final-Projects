@@ -1,8 +1,8 @@
-import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty, Image, Tag } from 'antd';
+import { Row, Col, Card, Button, Form, Input, Select, Typography, Space, Spin, Empty, Image, Tag, Upload, message } from 'antd';
 import {
-    HomeOutlined, ThunderboltOutlined, LineChartOutlined, GiftOutlined, CheckCircleOutlined
+    HomeOutlined, ThunderboltOutlined, LineChartOutlined, GiftOutlined, CheckCircleOutlined, UploadOutlined
 } from '@ant-design/icons';
-import { doc, getDoc, collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot, orderBy, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../../firebase';
 import dayjs from 'dayjs';
 import { useState, useEffect } from 'react';
@@ -74,6 +74,102 @@ const TenantParcelList = ({ roomNumber }) => {
     );
 };
 
+const TenantBillList = ({ roomNumber }) => {
+    const [bills, setBills] = useState([]);
+    const [uploading, setUploading] = useState(null);
+
+    useEffect(() => {
+        if (!roomNumber) return;
+        const q = query(
+            collection(db, "bills"),
+            where("room", "==", roomNumber),
+            where("status", "in", ["Pending", "Waiting for Review"])
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(d => ({ key: d.id, ...d.data() }));
+            data.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+            setBills(data);
+        });
+        return () => unsubscribe();
+    }, [roomNumber]);
+
+    const handleUpload = async (file, billId) => {
+        setUploading(billId);
+        try {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const base64 = reader.result;
+                await updateDoc(doc(db, "bills", billId), {
+                    proofUrl: base64,
+                    status: 'Waiting for Review',
+                    uploadedAt: new Date()
+                });
+                message.success('อัปโหลดสลิปเรียบร้อย');
+                setUploading(null);
+            };
+        } catch (error) {
+            console.error(error);
+            message.error('อัปโหลดล้มเหลว');
+            setUploading(null);
+        }
+        return false; // Prevent auto upload
+    };
+
+    if (bills.length === 0) {
+        return (
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 flex items-center justify-center text-slate-300 gap-2">
+                <CheckCircleOutlined />
+                <Text className="text-slate-400">ขอบคุณครับ ไม่มียอดค้างชำระ</Text>
+            </div>
+        );
+    }
+
+    return (
+        <div className="grid grid-cols-1 gap-4">
+            {bills.map(b => (
+                <div key={b.key} className="bg-white p-6 rounded-3xl border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <Space size="large">
+                        <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500">
+                            {b.status === 'Waiting for Review' ? <CheckCircleOutlined /> : <ThunderboltOutlined />}
+                        </div>
+                        <div>
+                            <Text className="font-black text-slate-800 block text-base">{b.type} ({dayjs(b.dueDate).format('MMM')})</Text>
+                            <Space>
+                                <Tag color={b.status === 'Waiting for Review' ? 'blue' : 'orange'} className="rounded-full border-none px-2 text-[10px] font-bold">
+                                    {b.status === 'Waiting for Review' ? 'รอตรวจสอบ' : 'รอชำระ'}
+                                </Tag>
+                                <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Due: {b.dueDate}</Text>
+                            </Space>
+                        </div>
+                    </Space>
+
+                    <div className="flex items-center gap-4">
+                        <Text className="text-xl font-black text-slate-700">฿{b.amount.toLocaleString()}</Text>
+                        {b.status === 'Pending' && (
+                            <Upload
+                                showUploadList={false}
+                                beforeUpload={(file) => handleUpload(file, b.key)}
+                                accept="image/*"
+                            >
+                                <Button type="primary" danger loading={uploading === b.key} className="rounded-xl font-bold">
+                                    จ่าย/แนบสลิป
+                                </Button>
+                            </Upload>
+                        )}
+                        {b.status === 'Waiting for Review' && (
+                            <Button disabled className="rounded-xl bg-slate-100 border-none text-slate-400">
+                                ส่งแล้ว
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 const TenantPortal = () => {
     const [roomData, setRoomData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -136,24 +232,9 @@ const TenantPortal = () => {
                         <TenantParcelList roomNumber={roomData.id} />
 
                         <div className="mt-8">
-                            <Text className="font-black uppercase tracking-widest text-[10px] text-slate-400 px-4">สรุปค่าใช้จ่าย</Text>
+                            <Text className="font-black uppercase tracking-widest text-[10px] text-slate-400 px-4">รายการที่ต้องชำระ (Pending Bills)</Text>
                         </div>
-                        {[
-                            { label: 'ค่าเช่าห้อง', val: roomData.price, icon: <HomeOutlined /> },
-                            { label: 'ค่าไฟ (120 หน่วย)', val: 840, icon: <ThunderboltOutlined /> },
-                            { label: 'ค่าน้ำ (เหมาจ่าย)', val: 110, icon: <LineChartOutlined /> },
-                        ].map((item, i) => (
-                            <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 flex justify-between items-center group hover:border-red-200 transition-all cursor-default">
-                                <Space size="large">
-                                    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-red-500 transition-colors">{item.icon}</div>
-                                    <div>
-                                        <Text className="font-black text-slate-800 block text-base">{item.label}</Text>
-                                        <Text className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">ค่าบริการรายเดือน</Text>
-                                    </div>
-                                </Space>
-                                <Text className="text-xl font-black text-slate-700">฿{item.val.toLocaleString()}</Text>
-                            </div>
-                        ))}
+                        <TenantBillList roomNumber={roomData.id} />
                     </div>
                 </Col>
                 <Col xs={24} md={8}>
