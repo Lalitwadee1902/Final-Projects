@@ -25,6 +25,10 @@ const RoomList = () => {
     const [roomBills, setRoomBills] = useState([]);
     const [loadingDetails, setLoadingDetails] = useState(false);
 
+    // Contract Preview
+    const [contractVisible, setContractVisible] = useState(false);
+    const [previewContract, setPreviewContract] = useState(null);
+
     const fetchRoomDetails = async (room) => {
         setLoadingDetails(true);
         setDetailRoom(room);
@@ -505,8 +509,11 @@ const RoomList = () => {
                                                 <Text className="text-slate-400 text-xs">อัปโหลดเมื่อ: {detailRoom.contractUpdatedAt ? dayjs(detailRoom.contractUpdatedAt.toDate()).format('DD/MM/YYYY HH:mm') : 'ไม่ระบุ'}</Text>
                                             </div>
                                             <div className="flex gap-2">
-                                                <Button type="primary" href={detailRoom.contractUrl} target="_blank">
-                                                    ดาวน์โหลด / เปิดดู
+                                                <Button type="primary" onClick={() => {
+                                                    setPreviewContract(detailRoom.contractUrl);
+                                                    setContractVisible(true);
+                                                }}>
+                                                    เปิดดูสัญญา
                                                 </Button>
                                                 <Popconfirm title="ลบสัญญา?" onConfirm={handleDeleteContract}>
                                                     <Button danger>ลบ</Button>
@@ -533,6 +540,24 @@ const RoomList = () => {
                             )
                         }
                     ]} />
+                )}
+            </Modal>
+
+            <Modal
+                title="เอกสารสัญญา"
+                open={contractVisible}
+                onCancel={() => setContractVisible(false)}
+                footer={null}
+                width={800}
+                centered
+                className="top-5"
+            >
+                {previewContract && (
+                    previewContract.startsWith('data:image') ? (
+                        <img src={previewContract} alt="Contract" className="w-full rounded-lg" />
+                    ) : (
+                        <iframe src={previewContract} className="w-full h-[70vh] rounded-lg border-none" title="Contract PDF" />
+                    )
                 )}
             </Modal>
         </>
