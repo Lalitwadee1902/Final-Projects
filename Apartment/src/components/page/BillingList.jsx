@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Image } from 'antd';
+import { Card, Table, Tag, Button, Typography, Space, Modal, Form, Input, InputNumber, DatePicker, Select, message, Popconfirm, Image, Popover } from 'antd';
 import { PlusOutlined, FileTextOutlined, CheckCircleOutlined, DeleteOutlined, CheckSquareOutlined, CloseOutlined } from '@ant-design/icons';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../../firebase';
@@ -89,12 +89,22 @@ const BillingList = ({ initialFilters }) => {
     const handleCreateBill = async (values) => {
         setLoading(true);
         try {
+            const rent = values.rent || 0;
+            const water = values.water || 0;
+            const electricity = values.electricity || 0;
+            const totalAmount = rent + water + electricity;
+
             await addDoc(collection(db, "bills"), {
                 room: values.room,
-                amount: values.amount,
+                amount: totalAmount,
+                details: {
+                    rent: rent,
+                    water: water,
+                    electricity: electricity
+                },
                 dueDate: values.dueDate.format('YYYY-MM-DD'),
                 status: 'Pending',
-                type: values.type || 'Rent',
+                type: 'Rent+Utilities',
                 createdAt: new Date()
             });
             message.success('สร้างบิลสำเร็จ');
@@ -194,7 +204,22 @@ const BillingList = ({ initialFilters }) => {
             title: 'ยอดชำระ',
             dataIndex: 'amount',
             key: 'amount',
-            render: (v) => <Text className="font-bold text-slate-900">฿{v.toLocaleString()}</Text>
+            render: (v, record) => (
+                <Popover
+                    content={
+                        record.details ? (
+                            <div className="text-xs space-y-1">
+                                <div className="flex justify-between gap-4"><Text>ค่าห้อง:</Text> <Text>฿{record.details.rent?.toLocaleString()}</Text></div>
+                                <div className="flex justify-between gap-4"><Text>ค่าน้ำ:</Text> <Text>฿{record.details.water?.toLocaleString()}</Text></div>
+                                <div className="flex justify-between gap-4"><Text>ค่าไฟ:</Text> <Text>฿{record.details.electricity?.toLocaleString()}</Text></div>
+                            </div>
+                        ) : 'ไม่มีรายละเอียด'
+                    }
+                    title="รายละเอียดยอดชำระ"
+                >
+                    <Text className="font-bold text-slate-900 cursor-pointer underline decoration-dotted">฿{v.toLocaleString()}</Text>
+                </Popover>
+            )
         },
         {
             title: 'หลักฐาน',
@@ -229,6 +254,22 @@ const BillingList = ({ initialFilters }) => {
                     </span>
                 </Tag>
             )
+        },
+        {
+            title: 'วันที่จ่าย',
+            key: 'paidAt',
+            render: (_, record) => {
+                if (record.status !== 'Paid') return <Text className="text-slate-300">-</Text>;
+                if (record.paidAt) {
+                    return (
+                        <div className="flex flex-col">
+                            <Text className="text-xs font-bold text-slate-700">{dayjs(record.paidAt.toDate()).format('DD/MM/YYYY')}</Text>
+                            <Text className="text-[10px] text-slate-400">{dayjs(record.paidAt.toDate()).format('HH:mm')}</Text>
+                        </div>
+                    );
+                }
+                return <Text className="text-slate-300 text-xs">-</Text>;
+            }
         },
         {
             title: '',
@@ -337,7 +378,7 @@ const BillingList = ({ initialFilters }) => {
                 footer={null}
                 destroyOnClose
             >
-                <Form layout="vertical" onFinish={handleCreateBill} form={form}>
+                <Form layout="vertical" onFinish={handleCreateBill} form={form} initialValues={{ rent: 4500, water: 100, electricity: 500 }}>
                     <Form.Item name="room" label="ห้อง" rules={[{ required: true, message: 'กรุณาเลือกห้อง' }]}>
                         <Select placeholder="เลือกห้อง">
                             {rooms.map(r => (
@@ -346,20 +387,35 @@ const BillingList = ({ initialFilters }) => {
                         </Select>
                     </Form.Item>
 
-                    <Form.Item name="type" label="ประเภทยอด" initialValue="ค่าเช่า (Rent)">
-                        <Select>
-                            <Option value="ค่าเช่า (Rent)">ค่าเช่า (Rent)</Option>
-                            <Option value="ค่าน้ำ/ไฟ (Utilities)">ค่าน้ำ/ไฟ (Utilities)</Option>
-                            <Option value="ซ่อมบำรุง (Maintenance)">ซ่อมบำรุง (Maintenance)</Option>
-                        </Select>
-                    </Form.Item>
-
-                    <Form.Item name="amount" label="จำนวนเงิน (บาท)" rules={[{ required: true }]}>
-                        <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
-                    </Form.Item>
+                    <div className="flex gap-2">
+                        <Form.Item name="rent" label="ค่าห้อง" className="flex-1" rules={[{ required: true }]}>
+                            <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                        </Form.Item>
+                        <Form.Item name="water" label="ค่าน้ำ" className="flex-1" rules={[{ required: true }]}>
+                            <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                        </Form.Item>
+                        <Form.Item name="electricity" label="ค่าไฟ" className="flex-1" rules={[{ required: true }]}>
+                            <InputNumber style={{ width: '100%' }} formatter={value => `฿ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={value => value.replace(/\฿\s?|(,*)/g, '')} />
+                        </Form.Item>
+                    </div>
 
                     <Form.Item name="dueDate" label="กำหนดชำระ" rules={[{ required: true }]}>
                         <DatePicker style={{ width: '100%' }} />
+                    </Form.Item>
+
+                    <Form.Item shouldUpdate={(prevValues, curValues) => prevValues.rent !== curValues.rent || prevValues.water !== curValues.water || prevValues.electricity !== curValues.electricity}>
+                        {() => {
+                            const rent = form.getFieldValue('rent') || 0;
+                            const water = form.getFieldValue('water') || 0;
+                            const electricity = form.getFieldValue('electricity') || 0;
+                            const total = rent + water + electricity;
+                            return (
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex justify-between items-center mb-4">
+                                    <Text className="text-slate-500 font-bold">ยอดสุทธิ (Total)</Text>
+                                    <Text className="text-2xl font-black text-slate-800">฿{total.toLocaleString()}</Text>
+                                </div>
+                            );
+                        }}
                     </Form.Item>
 
                     <Button type="primary" htmlType="submit" loading={loading} block danger className="h-10 font-bold">สร้างบิล</Button>
